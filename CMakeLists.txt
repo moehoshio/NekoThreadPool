@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(NekoThread VERSION 1.0 LANGUAGES CXX)
+project(NekoThreadPool VERSION 1.0 LANGUAGES CXX)
 
 option(NEKO_AUTO_FETCH_DEPS "Automatically fetch dependencies" ON)
 
@@ -19,18 +19,18 @@ if(NEKO_AUTO_FETCH_DEPS)
 endif(NEKO_AUTO_FETCH_DEPS)
 
 
-add_library(NekoThread INTERFACE)
+add_library(NekoThreadPool INTERFACE)
 
-target_include_directories(NekoThread INTERFACE
+target_include_directories(NekoThreadPool INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
 
 # Dependencies
-target_link_libraries(NekoThread INTERFACE NekoSchema)
+target_link_libraries(NekoThreadPool INTERFACE NekoSchema)
 
-target_compile_features(NekoThread INTERFACE cxx_std_20)
+target_compile_features(NekoThreadPool INTERFACE cxx_std_20)
 
 if(MSVC)
-    target_compile_options(NekoThread INTERFACE /Zc:__cplusplus)
+    target_compile_options(NekoThreadPool INTERFACE /Zc:__cplusplus)
 endif()

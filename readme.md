@@ -1,4 +1,4 @@
-# ThreadPool.hpp
+# NekoThreadPool
 
 An easy-to-use and efficient C++ 20 thread pool that supports task priorities, statistics collection, and task submission to specific threads.
 
@@ -20,23 +20,32 @@ An easy-to-use and efficient C++ 20 thread pool that supports task priorities, s
 
 ## Quick Start
 
+Configuration: [CMake](#cmake) | [Manual](#manual)
+
+Example: [Basic Usage](#basic-usage) | [Tasks with Parameters](#tasks-with-parameters) | [](#set-maximum-queue-size) | [Dynamic Thread Count Adjustment](#dynamic-thread-count-adjustment) | [Custom Logging](#custom-logging) | [Statistics Control](#statistics-control) | [Error Handling](#error-handling)
+
+Advanced: [Task Priority](#task-priority) | [Assign Tasks to Specific Threads](#assign-tasks-to-specific-threads) | [Waiting for Task Completion](#waiting-for-task-completion)
+
+Statistics and Monitoring: [Get Statistics Information](#get-statistics-information) | [Real-time Utilization Monitoring](#real-time-utilization-monitoring)
+
+API Reference: [Core Methods](#core-methods) | [Configuration Methods](#configuration-methods) | [Query Methods](#query-methods)
 
 ### CMake
 
-1. Using CMake's `FetchContent` to include NekoThread in your project:
+1. Using CMake's `FetchContent` to include NekoThreadPool in your project:
 
 ```cmake
 include(FetchContent)
 
-# Add NekoThread to your CMake project
+# Add NekoThreadPool to your CMake project
 FetchContent_Declare(
-    NekoThread
-    GIT_REPOSITORY https://github.com/moehoshio/threadPool.hpp.git
+    NekoThreadPool
+    GIT_REPOSITORY https://github.com/moehoshio/NekoThreadPool.git
     GIT_TAG        main
 )
-FetchContent_MakeAvailable(NekoThread)
+FetchContent_MakeAvailable(NekoThreadPool)
 
-target_link_libraries(your_target PRIVATE NekoThread)
+target_link_libraries(your_target PRIVATE NekoThreadPool)
 ```
 
 2. Include the header in your source code
@@ -54,21 +63,21 @@ After installing the dependency, please continue:
 1. Clone or download the repository to your host
 
 ```sh
-git clone https://github.com/moehoshio/threadPool.hpp.git
+git clone https://github.com/moehoshio/NekoThreadPool.git
 ```
 
 or
 
 ```sh
-curl -L -o threadPool.zip https://github.com/moehoshio/threadPool.hpp/archive/refs/heads/main.zip
+curl -L -o NekoThreadPool.zip https://github.com/moehoshio/NekoThreadPool/archive/refs/heads/main.zip
 
-unzip threadPool.zip
+unzip NekoThreadPool.zip
 ```
 
-2. Copy the contents of the `threadPool.hpp/include` folder into your project's `include` directory.
+2. Copy the contents of the `NekoThreadPool/include` folder into your project's `include` directory.
 
 ```shell
-cp -r threadPool.hpp/include/ /path/to/your/include/
+cp -r NekoThreadPool/include/ /path/to/your/include/
 ```
 
 3. Include the header in your source code
