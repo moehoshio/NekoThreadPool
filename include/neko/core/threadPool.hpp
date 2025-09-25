@@ -7,8 +7,8 @@
  */
 #pragma once
 
-#include "neko/schema/exception.hpp"
-#include "neko/schema/types.hpp"
+#include <neko/schema/exception.hpp>
+#include <neko/schema/types.hpp>
 
 #include <algorithm>
 #include <chrono>
