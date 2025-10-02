@@ -111,7 +111,7 @@ int main() {
 ### Tasks with Parameters
 
 ```cpp
-#include "neko/core/threadPool.hpp"
+#include <neko/core/threadPool.hpp>
 #include <iostream>
 
 int add(int a, int b) {
@@ -141,7 +141,7 @@ int main() {
 ### Task Priority
 
 ```cpp
-#include "neko/core/threadPool.hpp"
+#include <neko/core/threadPool.hpp>
 #include "neko/schema/types.hpp"
 #include <iostream>
 
@@ -166,7 +166,7 @@ int main() {
 ### Assign Tasks to Specific Threads
 
 ```cpp
-#include "neko/core/threadPool.hpp"
+#include <neko/core/threadPool.hpp>
 #include <iostream>
 
 int main() {
@@ -200,7 +200,7 @@ Note: Assigning to a non-existent thread ID will throw a `neko::ex::OutOfRange` 
 ### Waiting for Task Completion
 
 ```cpp
-#include "neko/core/threadPool.hpp"
+#include <neko/core/threadPool.hpp>
 #include <chrono>
 #include <iostream>
 
@@ -236,7 +236,7 @@ int main() {
 ### Get Statistics Information
 
 ```cpp
-#include "neko/core/threadPool.hpp"
+#include <neko/core/threadPool.hpp>
 #include <iostream>
 
 int main() {
@@ -269,7 +269,7 @@ int main() {
 ### Real-time Utilization Monitoring
 
 ```cpp
-#include "neko/core/threadPool.hpp"
+#include <neko/core/threadPool.hpp>
 #include <iostream>
 #include <thread>
 
@@ -360,8 +360,8 @@ pool.resetStats();
 ## Error Handling
 
 ```cpp
-#include "neko/core/threadPool.hpp"
-#include "neko/schema/exception.hpp"
+#include <neko/core/threadPool.hpp>
+#include <neko/schema/exception.hpp>
 #include <iostream>
 
 int main() {

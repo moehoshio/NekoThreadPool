@@ -202,6 +202,7 @@ namespace neko::core::thread {
                         task = std::move(self->personalTaskQueue.front());
                         self->personalTaskQueue.pop();
                         hasTask = true;
+                        ++activeTasks;  // Fix: increment activeTasks for personal queue tasks too
                     }
                 }
 
@@ -218,9 +219,10 @@ namespace neko::core::thread {
                 if (!hasTask) {
                     {
                         std::unique_lock<std::mutex> lock(taskQueueMutex);
-                        taskQueueCondVar.wait(lock, [this, self] {
-                            std::lock_guard<std::mutex> lock(self->personalTaskMutex);
-                            return isStop.load() || !tasks.empty() || !self->personalTaskQueue.empty();
+                        taskQueueCondVar.wait(lock, [this] {
+                            // Avoid locking personalTaskMutex in predicate to prevent deadlock
+                            // Just check if stop is requested or if global queue has tasks
+                            return isStop.load() || !tasks.empty();
                         });
                     }
                     continue;
@@ -422,8 +424,9 @@ namespace neko::core::thread {
         void waitForAllTasksCompletion() {
             std::shared_lock<std::shared_mutex> lock(completionMutex);
             completionCondVar.wait(lock, [this] {
-                std::lock_guard<std::mutex> queueLock(taskQueueMutex);
-                return tasks.empty() && activeTasks.load() == 0;
+                // Avoid locking taskQueueMutex in predicate to prevent deadlock
+                // Only check activeTasks counter - when it's 0, all tasks are done
+                return activeTasks.load() == 0;
             });
         }
 
@@ -436,8 +439,8 @@ namespace neko::core::thread {
         bool waitForAllTasksCompletion(const std::chrono::duration<Rep, Period> &timeout) {
             std::shared_lock<std::shared_mutex> lock(completionMutex);
             return completionCondVar.wait_for(lock, timeout, [this] {
-                std::lock_guard<std::mutex> queueLock(taskQueueMutex);
-                return tasks.empty() && activeTasks.load() == 0;
+                // Avoid locking taskQueueMutex in predicate to prevent deadlock
+                return activeTasks.load() == 0;
             });
         }
 
