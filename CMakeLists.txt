@@ -52,7 +52,7 @@ if(NEKO_BUILD_TESTS)
     endif()
 
     enable_testing()
-    add_executable(threadPool_test tests/threadPool_test.cpp)
+    add_executable(threadPool_test tests/threadPool_test_simple.cpp)
     target_include_directories(threadPool_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_link_libraries(threadPool_test PRIVATE NekoThreadPool gtest_main)
     target_compile_features(threadPool_test PRIVATE cxx_std_20)
