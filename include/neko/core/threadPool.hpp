@@ -178,20 +178,24 @@ namespace neko::core::thread {
             }
 
             while (!isStop.load()) {
-                { // Check if this worker is marked for exit
+                // Check if this worker is marked for exit
+                bool shouldExit = false;
+                {
                     std::lock_guard<std::mutex> exitLock(exitIdsMutex);
-                    if (exitWorkerIds.count(workerId)) {
-                        // Exit the worker thread loop
-                        // Don't remove from workers here - let setThreadCount handle cleanup
-                        return;
-                    }
+                    shouldExit = (exitWorkerIds.count(workerId) > 0);
+                }
+                
+                if (shouldExit) {
+                    // Don't process any more tasks, just wait for stop()
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                    continue;
                 }
 
                 Task task{nullptr, neko::Priority::Normal, 0};
                 bool hasTask = false;
 
-                // Check personal queue first
-                {
+                // Check personal queue first (only if we have valid self pointer)
+                if (self) {
                     std::lock_guard<std::mutex> lock(self->personalTaskMutex);
                     if (!self->personalTaskQueue.empty()) {
                         task = std::move(self->personalTaskQueue.front());
@@ -487,47 +491,43 @@ namespace neko::core::thread {
                 newThreadCount = 1;
             }
 
-            if (newThreadCount == getThreadCount()) {
+            std::unique_lock<std::mutex> lock(workerMutex);
+            
+            // Count active (non-exiting) workers
+            neko::uint64 activeCount;
+            {
+                std::lock_guard<std::mutex> exitLock(exitIdsMutex);
+                activeCount = 0;
+                for (const auto& worker : workers) {
+                    if (exitWorkerIds.find(worker.id) == exitWorkerIds.end()) {
+                        ++activeCount;
+                    }
+                }
+            }
+            
+            if (newThreadCount == activeCount) {
                 return;
             }
-
-            std::unique_lock<std::mutex> lock(workerMutex);
 
             if (newThreadCount > workers.size()) {
                 for (neko::uint64 i = workers.size(); i < newThreadCount; ++i) {
                     workers.push_back(createWorker());
                 }
             } else if (newThreadCount < workers.size()) {
-                // Collect workers to remove
+                // Decreasing thread count: mark excess workers for exit
+                // They will continue to exist but won't process new tasks
+                // Actual cleanup happens during stop()
                 neko::uint64 needToExit = workers.size() - newThreadCount;
-                std::vector<WorkerInfo> workersToRemove;
                 
                 {
                     std::lock_guard<std::mutex> exitLock(exitIdsMutex);
                     for (neko::uint64 i = 0; i < needToExit; ++i) {
                         exitWorkerIds.insert(workers.at(i).id);
-                        workersToRemove.push_back(std::move(workers.at(i)));
                     }
                 }
                 
-                // Remove marked workers from vector
-                workers.erase(workers.begin(), workers.begin() + needToExit);
-                
-                // Notify and wait for them to exit without holding workerMutex
-                lock.unlock();
+                // Notify threads to check their exit status
                 taskQueueCondVar.notify_all();
-                
-                for (auto& worker : workersToRemove) {
-                    worker.cleanup(true);
-                }
-                
-                // Clear exitWorkerIds
-                {
-                    std::lock_guard<std::mutex> exitLock(exitIdsMutex);
-                    for (const auto& worker : workersToRemove) {
-                        exitWorkerIds.erase(worker.id);
-                    }
-                }
             }
         }
 
@@ -604,8 +604,16 @@ namespace neko::core::thread {
          * @return The total number of worker threads.
          */
         neko::uint64 getThreadCount() const noexcept {
-            std::lock_guard<std::mutex> lock(workerMutex);
-            return workers.size();
+            std::lock_guard<std::mutex> workerLock(workerMutex);
+            std::lock_guard<std::mutex> exitLock(exitIdsMutex);
+            // Count only workers that are not marked for exit
+            neko::uint64 count = 0;
+            for (const auto& worker : workers) {
+                if (exitWorkerIds.find(worker.id) == exitWorkerIds.end()) {
+                    ++count;
+                }
+            }
+            return count;
         }
 
         /**
