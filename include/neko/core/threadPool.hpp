@@ -179,16 +179,11 @@ namespace neko::core::thread {
 
             while (!isStop.load()) {
                 { // Check if this worker is marked for exit
-                    std::lock_guard<std::mutex> lock(exitIdsMutex);
+                    std::lock_guard<std::mutex> exitLock(exitIdsMutex);
                     if (exitWorkerIds.count(workerId)) {
-                        std::lock_guard<std::mutex> lock(workerMutex);
-
-                        for (auto it = workers.begin(); it != workers.end(); ++it) {
-                            if (it->id == workerId) {
-                                workers.erase(it);
-                                break;
-                            }
-                        }
+                        // Exit the worker thread loop
+                        // Don't remove from workers here - let setThreadCount handle cleanup
+                        return;
                     }
                 }
 
@@ -213,6 +208,12 @@ namespace neko::core::thread {
                         tasks.pop();
                         hasTask = true;
                         ++activeTasks;
+                        
+                        // Notify if queue becomes empty
+                        if (tasks.empty()) {
+                            std::unique_lock<std::shared_mutex> completionLock(completionMutex);
+                            completionCondVar.notify_all();
+                        }
                     }
                 }
 
@@ -424,9 +425,9 @@ namespace neko::core::thread {
         void waitForAllTasksCompletion() {
             std::shared_lock<std::shared_mutex> lock(completionMutex);
             completionCondVar.wait(lock, [this] {
-                // Avoid locking taskQueueMutex in predicate to prevent deadlock
-                // Only check activeTasks counter - when it's 0, all tasks are done
-                return activeTasks.load() == 0;
+                // Check both queue and active tasks - both must be 0 for all tasks to be done
+                std::lock_guard<std::mutex> queueLock(taskQueueMutex);
+                return tasks.empty() && activeTasks.load() == 0;
             });
         }
 
@@ -439,8 +440,9 @@ namespace neko::core::thread {
         bool waitForAllTasksCompletion(const std::chrono::duration<Rep, Period> &timeout) {
             std::shared_lock<std::shared_mutex> lock(completionMutex);
             return completionCondVar.wait_for(lock, timeout, [this] {
-                // Avoid locking taskQueueMutex in predicate to prevent deadlock
-                return activeTasks.load() == 0;
+                // Check both queue and active tasks - both must be 0 for all tasks to be done
+                std::lock_guard<std::mutex> queueLock(taskQueueMutex);
+                return tasks.empty() && activeTasks.load() == 0;
             });
         }
 
@@ -455,11 +457,19 @@ namespace neko::core::thread {
                 taskQueueCondVar.notify_all();
             }
 
-            std::unique_lock<std::mutex> workerLock(workerMutex);
-            for (WorkerInfo &worker : workers) {
+            // Move all workers out first, then join WITHOUT holding lock
+            // This avoids deadlock where worker threads need workerMutex during initialization
+            std::vector<WorkerInfo> workersToJoin;
+            {
+                std::unique_lock<std::mutex> workerLock(workerMutex);
+                workersToJoin = std::move(workers);
+                workers.clear();
+            }
+
+            // Now join all threads without holding any locks
+            for (WorkerInfo &worker : workersToJoin) {
                 worker.cleanup(waitForCompletion);
             }
-            workers.clear();
         }
 
         /**
@@ -488,13 +498,36 @@ namespace neko::core::thread {
                     workers.push_back(createWorker());
                 }
             } else if (newThreadCount < workers.size()) {
-                // notify workers to exit
-                std::lock_guard<std::mutex> exitLock(exitIdsMutex);
+                // Collect workers to remove
                 neko::uint64 needToExit = workers.size() - newThreadCount;
-                for (neko::uint64 i = 0; i < needToExit; ++i) {
-                    exitWorkerIds.insert(workers.at(i).id);
+                std::vector<WorkerInfo> workersToRemove;
+                
+                {
+                    std::lock_guard<std::mutex> exitLock(exitIdsMutex);
+                    for (neko::uint64 i = 0; i < needToExit; ++i) {
+                        exitWorkerIds.insert(workers.at(i).id);
+                        workersToRemove.push_back(std::move(workers.at(i)));
+                    }
                 }
+                
+                // Remove marked workers from vector
+                workers.erase(workers.begin(), workers.begin() + needToExit);
+                
+                // Notify and wait for them to exit without holding workerMutex
+                lock.unlock();
                 taskQueueCondVar.notify_all();
+                
+                for (auto& worker : workersToRemove) {
+                    worker.cleanup(true);
+                }
+                
+                // Clear exitWorkerIds
+                {
+                    std::lock_guard<std::mutex> exitLock(exitIdsMutex);
+                    for (const auto& worker : workersToRemove) {
+                        exitWorkerIds.erase(worker.id);
+                    }
+                }
             }
         }
 
