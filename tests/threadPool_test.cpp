@@ -90,6 +90,225 @@ TEST_F(ThreadPoolTest, ThreadCount) {
     EXPECT_EQ(pool2.getThreadCount(), 4);
 }
 
+// === Thread Count Management Tests ===
+
+TEST_F(ThreadPoolTest, SetThreadCountIncrease) {
+    ThreadPool pool(2);
+    EXPECT_EQ(pool.getThreadCount(), 2);
+    
+    // Increase thread count
+    pool.setThreadCount(4);
+    EXPECT_EQ(pool.getThreadCount(), 4);
+    
+    // Verify new worker IDs are created
+    auto workerIds = pool.getWorkerIds();
+    EXPECT_EQ(workerIds.size(), 4);
+    
+    // Test that all threads are functional
+    std::atomic<int> counter{0};
+    std::vector<std::future<void>> futures;
+    
+    for (int i = 0; i < 8; ++i) {
+        futures.push_back(pool.submit([&counter]() {
+            std::this_thread::sleep_for(10ms);
+            counter.fetch_add(1);
+        }));
+    }
+    
+    for (auto& future : futures) {
+        future.wait();
+    }
+    
+    EXPECT_EQ(counter.load(), 8);
+}
+
+TEST_F(ThreadPoolTest, SetThreadCountDecrease) {
+    ThreadPool pool(4);
+    EXPECT_EQ(pool.getThreadCount(), 4);
+    
+    // Wait for threads to stabilize
+    std::this_thread::sleep_for(10ms);
+    
+    // Submit some tasks to ensure threads are active
+    std::atomic<int> counter{0};
+    std::vector<std::future<void>> futures;
+    
+    for (int i = 0; i < 6; ++i) {
+        futures.push_back(pool.submit([&counter]() {
+            std::this_thread::sleep_for(20ms);
+            counter.fetch_add(1);
+        }));
+    }
+    
+    std::this_thread::sleep_for(10ms); // Let tasks start
+    
+    // Decrease thread count
+    pool.setThreadCount(2);
+    EXPECT_EQ(pool.getThreadCount(), 2);
+    
+    // Verify worker IDs are correct
+    auto workerIds = pool.getWorkerIds();
+    EXPECT_EQ(workerIds.size(), 2);
+    
+    // Wait for all original tasks to complete
+    for (auto& future : futures) {
+        future.wait();
+    }
+    
+    EXPECT_EQ(counter.load(), 6);
+    
+    // Wait a moment for cleanup
+    std::this_thread::sleep_for(10ms);
+    
+    // Verify remaining threads still work
+    auto future = pool.submit([&counter]() {
+        counter.fetch_add(10);
+        return 42;
+    });
+    
+    EXPECT_EQ(future.get(), 42);
+    EXPECT_EQ(counter.load(), 16);
+}
+
+TEST_F(ThreadPoolTest, SetThreadCountSameValue) {
+    ThreadPool pool(3);
+    EXPECT_EQ(pool.getThreadCount(), 3);
+    
+    auto workerIds_before = pool.getWorkerIds();
+    
+    // Set to same value
+    pool.setThreadCount(3);
+    EXPECT_EQ(pool.getThreadCount(), 3);
+    
+    auto workerIds_after = pool.getWorkerIds();
+    EXPECT_EQ(workerIds_before, workerIds_after);
+    
+    // Verify functionality is unaffected
+    auto future = pool.submit([]() { return 123; });
+    EXPECT_EQ(future.get(), 123);
+}
+
+TEST_F(ThreadPoolTest, SetThreadCountZero) {
+    ThreadPool pool(2);
+    
+    // Wait a moment for threads to stabilize
+    std::this_thread::sleep_for(10ms);
+    
+    // Setting to 0 should default to 1
+    pool.setThreadCount(0);
+    EXPECT_EQ(pool.getThreadCount(), 1);
+    
+    // Wait a moment for the resize to complete
+    std::this_thread::sleep_for(20ms);
+    
+    // Verify it still works
+    auto future = pool.submit([]() { return 456; });
+    EXPECT_EQ(future.get(), 456);
+}
+
+TEST_F(ThreadPoolTest, SetThreadCountAfterStop) {
+    ThreadPool pool(2);
+    
+    pool.stop();
+    
+    // Should throw exception when trying to resize stopped pool
+    EXPECT_THROW(pool.setThreadCount(4), neko::ex::ProgramExit);
+}
+
+TEST_F(ThreadPoolTest, SetThreadCountStressTest) {
+    ThreadPool pool(2);
+    
+    std::atomic<int> counter{0};
+    std::vector<std::future<void>> futures;
+    
+    // Submit initial tasks
+    for (int i = 0; i < 4; ++i) {
+        futures.push_back(pool.submit([&counter]() {
+            std::this_thread::sleep_for(10ms);
+            counter.fetch_add(1);
+        }));
+    }
+    
+    // Increase thread count
+    pool.setThreadCount(4);
+    
+    // Submit more tasks
+    for (int i = 0; i < 4; ++i) {
+        futures.push_back(pool.submit([&counter]() {
+            std::this_thread::sleep_for(5ms);
+            counter.fetch_add(1);
+        }));
+    }
+    
+    // Wait for all tasks
+    for (auto& future : futures) {
+        future.wait();
+    }
+    
+    EXPECT_EQ(counter.load(), 8);
+    EXPECT_EQ(pool.getThreadCount(), 4);
+}
+
+TEST_F(ThreadPoolTest, SetThreadCountBasicResize) {
+    ThreadPool pool(2);
+    
+    // Test upsize only
+    pool.setThreadCount(4);
+    EXPECT_EQ(pool.getThreadCount(), 4);
+    
+    // Test functionality after resize
+    auto future = pool.submit([]() { return 42; });
+    EXPECT_EQ(future.get(), 42);
+}
+
+TEST_F(ThreadPoolTest, SetThreadCountWithWorkerSpecificTasks) {
+    ThreadPool pool(2);
+    
+    auto initial_ids = pool.getWorkerIds();
+    EXPECT_EQ(initial_ids.size(), 2);
+    
+    std::atomic<int> counter{0};
+    std::vector<std::future<void>> futures;
+    
+    // Submit tasks to specific workers
+    for (int i = 0; i < 4; ++i) {
+        futures.push_back(pool.submitToWorker(initial_ids[i % 2], [&counter]() {
+            std::this_thread::sleep_for(30ms);
+            counter.fetch_add(1);
+        }));
+    }
+    
+    std::this_thread::sleep_for(10ms);
+    
+    // Increase thread count while worker-specific tasks are running
+    pool.setThreadCount(4);
+    EXPECT_EQ(pool.getThreadCount(), 4);
+    
+    auto new_ids = pool.getWorkerIds();
+    EXPECT_EQ(new_ids.size(), 4);
+    
+    // Wait for original tasks
+    for (auto& future : futures) {
+        future.wait();
+    }
+    
+    EXPECT_EQ(counter.load(), 4);
+    
+    // Test new workers
+    futures.clear();
+    for (size_t i = 0; i < new_ids.size(); ++i) {
+        futures.push_back(pool.submitToWorker(new_ids[i], [&counter]() {
+            counter.fetch_add(1);
+        }));
+    }
+    
+    for (auto& future : futures) {
+        future.wait();
+    }
+    
+    EXPECT_EQ(counter.load(), 8);
+}
+
 // === Priority Tests ===
 
 TEST_F(ThreadPoolTest, PrioritySubmission) {
@@ -118,6 +337,99 @@ TEST_F(ThreadPoolTest, PrioritySubmission) {
     high_future.wait();
     
     EXPECT_EQ(counter.load(), 11);
+}
+
+TEST_F(ThreadPoolTest, PriorityOrdering) {
+    ThreadPool pool(1);  // Single thread to ensure sequential execution
+    
+    std::vector<neko::Priority> execution_order;
+    std::mutex order_mutex;
+    std::atomic<bool> blocker{true};
+    
+    // Submit a blocking task first
+    auto blocker_future = pool.submit([&blocker]() {
+        while (blocker.load()) {
+            std::this_thread::sleep_for(1ms);
+        }
+    });
+    
+    std::this_thread::sleep_for(10ms); // Ensure blocker starts
+    
+    // Now submit tasks with different priorities
+    auto low_future = pool.submitWithPriority(neko::Priority::Low, [&]() {
+        std::lock_guard<std::mutex> lock(order_mutex);
+        execution_order.push_back(neko::Priority::Low);
+    });
+    
+    auto normal_future = pool.submitWithPriority(neko::Priority::Normal, [&]() {
+        std::lock_guard<std::mutex> lock(order_mutex);
+        execution_order.push_back(neko::Priority::Normal);
+    });
+    
+    auto high_future = pool.submitWithPriority(neko::Priority::High, [&]() {
+        std::lock_guard<std::mutex> lock(order_mutex);
+        execution_order.push_back(neko::Priority::High);
+    });
+    
+    std::this_thread::sleep_for(10ms); // Ensure all tasks are queued
+    
+    // Release the blocker
+    blocker.store(false);
+    
+    // Wait for all tasks
+    blocker_future.wait();
+    high_future.wait();
+    normal_future.wait();
+    low_future.wait();
+    
+    // Verify execution order: High, Normal, Low
+    ASSERT_EQ(execution_order.size(), 3);
+    EXPECT_EQ(execution_order[0], neko::Priority::High);
+    EXPECT_EQ(execution_order[1], neko::Priority::Normal);
+    EXPECT_EQ(execution_order[2], neko::Priority::Low);
+}
+
+TEST_F(ThreadPoolTest, SamePriorityTaskOrdering) {
+    ThreadPool pool(1);  // Single thread to ensure sequential execution
+    
+    std::vector<int> execution_order;
+    std::mutex order_mutex;
+    std::atomic<bool> blocker{true};
+    
+    // Submit a blocking task first
+    auto blocker_future = pool.submit([&blocker]() {
+        while (blocker.load()) {
+            std::this_thread::sleep_for(1ms);
+        }
+    });
+    
+    std::this_thread::sleep_for(10ms); // Ensure blocker starts
+    
+    // Submit multiple tasks with same priority
+    std::vector<std::future<void>> futures;
+    for (int i = 0; i < 5; ++i) {
+        futures.push_back(pool.submitWithPriority(neko::Priority::Normal, [&, i]() {
+            std::lock_guard<std::mutex> lock(order_mutex);
+            execution_order.push_back(i);
+        }));
+    }
+    
+    std::this_thread::sleep_for(10ms); // Ensure all tasks are queued
+    
+    // Release the blocker
+    blocker.store(false);
+    
+    // Wait for all tasks
+    blocker_future.wait();
+    for (auto& future : futures) {
+        future.wait();
+    }
+    
+    // Tasks with same priority should execute in FIFO order (first submitted first executed)
+    ASSERT_EQ(execution_order.size(), 5);
+    for (int i = 0; i < 5; ++i) {
+        EXPECT_EQ(execution_order[i], i);
+    }
 }
 
 // === Queue Management Tests ===
@@ -201,7 +513,7 @@ TEST_F(ThreadPoolTest, WaitForCompletion) {
     
     pool.waitForCompletion();
     EXPECT_EQ(counter.load(), 3);
-    EXPECT_TRUE(pool.isEmpty());
+    EXPECT_EQ(pool.getPendingTaskCount(), 0);
 }
 
 // === Exception Handling ===
@@ -335,6 +647,63 @@ TEST_F(ThreadPoolTest, QueueFullRejection) {
     for (auto& future : futures) {
         future.wait();
     }
+}
+
+TEST_F(ThreadPoolTest, SetMaxQueueSizeDynamic) {
+    ThreadPool pool(1);
+    
+    // Start with default size
+    EXPECT_EQ(pool.getMaxQueueSize(), 100000);
+    
+    // Change to smaller size
+    pool.setMaxQueueSize(5);
+    EXPECT_EQ(pool.getMaxQueueSize(), 5);
+    
+    // Change to larger size
+    pool.setMaxQueueSize(1000);
+    EXPECT_EQ(pool.getMaxQueueSize(), 1000);
+    
+    // Change to 0 (special case)
+    pool.setMaxQueueSize(0);
+    EXPECT_EQ(pool.getMaxQueueSize(), 0);
+    
+    // With max size 0, queue utilization should be 0
+    EXPECT_DOUBLE_EQ(pool.getQueueUtilization(), 0.0);
+}
+
+TEST_F(ThreadPoolTest, QueueFullWithPriorities) {
+    ThreadPool pool(1);  // Single thread
+    
+    pool.setMaxQueueSize(2);
+    std::atomic<bool> task_running{false};
+    
+    // Submit a blocking task
+    auto blocking_future = pool.submit([&task_running]() {
+        task_running.store(true);
+        std::this_thread::sleep_for(100ms);
+    });
+    
+    // Wait for blocker to start
+    while (!task_running.load()) {
+        std::this_thread::sleep_for(1ms);
+    }
+    
+    // Fill queue with low priority tasks
+    auto low1 = pool.submitWithPriority(neko::Priority::Low, []() {});
+    auto low2 = pool.submitWithPriority(neko::Priority::Low, []() {});
+    
+    // Queue should be full now
+    EXPECT_TRUE(pool.isQueueFull());
+    
+    // Next task should be rejected regardless of priority
+    EXPECT_THROW(
+        pool.submitWithPriority(neko::Priority::High, []() {}),
+        neko::ex::TaskRejected
+    );
+    
+    blocking_future.wait();
+    low1.wait();
+    low2.wait();
 }
 
 TEST_F(ThreadPoolTest, QueueUtilizationTracking) {
@@ -506,6 +875,108 @@ TEST_F(ThreadPoolTest, ThreadUtilizationUnderLoad) {
     EXPECT_LE(pool.getThreadUtilization(), 0.1);
 }
 
+TEST_F(ThreadPoolTest, ThreadUtilizationEdgeCases) {
+    // Test with 0 active tasks
+    ThreadPool pool(3);
+    EXPECT_DOUBLE_EQ(pool.getThreadUtilization(), 0.0);
+    
+    // Test with partial utilization
+    std::vector<std::future<void>> futures;
+    futures.push_back(pool.submit([]() {
+        std::this_thread::sleep_for(50ms);
+    }));
+    
+    std::this_thread::sleep_for(10ms);
+    
+    double utilization = pool.getThreadUtilization();
+    EXPECT_GE(utilization, 0.0);
+    EXPECT_LE(utilization, 1.0);
+    
+    futures[0].wait();
+}
+
+TEST_F(ThreadPoolTest, QueueUtilizationDetailedTest) {
+    ThreadPool pool(1);
+    pool.setMaxQueueSize(10);
+    
+    std::atomic<bool> blocker{true};
+    
+    // Block the worker
+    auto blocking_future = pool.submit([&blocker]() {
+        while (blocker.load()) {
+            std::this_thread::sleep_for(1ms);
+        }
+    });
+    
+    std::this_thread::sleep_for(10ms);
+    
+    // Add tasks incrementally and check utilization
+    std::vector<std::future<void>> futures;
+    
+    // Add 3 tasks
+    for (int i = 0; i < 3; ++i) {
+        futures.push_back(pool.submit([]() {}));
+    }
+    std::this_thread::sleep_for(5ms);
+    double util1 = pool.getQueueUtilization();
+    EXPECT_GE(util1, 0.25);  // Should be around 0.3
+    EXPECT_LE(util1, 0.35);
+    
+    // Add 2 more tasks (total 5)
+    for (int i = 0; i < 2; ++i) {
+        futures.push_back(pool.submit([]() {}));
+    }
+    std::this_thread::sleep_for(5ms);
+    double util2 = pool.getQueueUtilization();
+    EXPECT_GE(util2, 0.45);  // Should be around 0.5
+    EXPECT_LE(util2, 0.55);
+    
+    // Release blocker and wait
+    blocker.store(false);
+    blocking_future.wait();
+    for (auto& future : futures) {
+        future.wait();
+    }
+    
+    // Utilization should be 0 after completion
+    EXPECT_DOUBLE_EQ(pool.getQueueUtilization(), 0.0);
+}
+
+TEST_F(ThreadPoolTest, GetPendingTaskCountAccuracy) {
+    ThreadPool pool(1);
+    
+    std::atomic<bool> blocker{true};
+    
+    // Block the worker
+    auto blocking_future = pool.submit([&blocker]() {
+        while (blocker.load()) {
+            std::this_thread::sleep_for(1ms);
+        }
+    });
+    
+    std::this_thread::sleep_for(10ms);
+    EXPECT_EQ(pool.getPendingTaskCount(), 0);  // Blocking task is running, not pending
+    
+    // Add pending tasks
+    std::vector<std::future<void>> futures;
+    for (int i = 0; i < 5; ++i) {
+        futures.push_back(pool.submit([]() {}));
+        std::this_thread::sleep_for(1ms);
+        EXPECT_EQ(pool.getPendingTaskCount(), i + 1);
+    }
+    
+    // Release blocker
+    blocker.store(false);
+    blocking_future.wait();
+    
+    // Wait for tasks to complete
+    for (auto& future : futures) {
+        future.wait();
+    }
+    
+    EXPECT_EQ(pool.getPendingTaskCount(), 0);
+}
+
 // === Submit To Specific Worker Tests ===
 
 TEST_F(ThreadPoolTest, SubmitToWorkerBasic) {
@@ -649,7 +1120,7 @@ TEST_F(ThreadPoolTest, WaitForCompletionWithTimeoutSuccess) {
     pool.waitForCompletion(500ms);
     
     EXPECT_EQ(counter.load(), 3);
-    EXPECT_TRUE(pool.isEmpty());
+    EXPECT_EQ(pool.getPendingTaskCount(), 0);
 }
 
 TEST_F(ThreadPoolTest, WaitForCompletionWithTimeoutExpires) {
@@ -706,18 +1177,18 @@ TEST_F(ThreadPoolTest, WaitForCompletionWithTimeoutDifferentDurations) {
     // Test with seconds
     pool.submit([]() { std::this_thread::sleep_for(10ms); });
     pool.waitForCompletion(std::chrono::seconds(1));
-    EXPECT_TRUE(pool.isEmpty());
+    EXPECT_EQ(pool.getPendingTaskCount(), 0);
     
     // Test with microseconds
     pool.submit([]() { std::this_thread::sleep_for(10ms); });
     pool.waitForCompletion(std::chrono::microseconds(500000));
-    EXPECT_TRUE(pool.isEmpty());
+    EXPECT_EQ(pool.getPendingTaskCount(), 0);
     
     // Test with nanoseconds (very short)
     pool.submit([]() { std::this_thread::sleep_for(100ms); });
     pool.waitForCompletion(std::chrono::nanoseconds(1000000)); // 1ms
     // Should timeout quickly
-    EXPECT_FALSE(pool.isEmpty());
+    EXPECT_GT(pool.getPendingTaskCount(), 0);
     
     pool.waitForCompletion();
 }
@@ -787,6 +1258,146 @@ TEST_F(ThreadPoolTest, SubmitToWorkerAndWaitWithTimeout) {
     }
     
     EXPECT_EQ(counter.load(), 6);
+}
+
+TEST_F(ThreadPoolTest, ComprehensiveFeatureIntegration) {
+    ThreadPool pool(2);
+    
+    // Test initial state
+    EXPECT_EQ(pool.getThreadCount(), 2);
+    EXPECT_EQ(pool.getMaxQueueSize(), 100000);
+    EXPECT_EQ(pool.getPendingTaskCount(), 0);
+    EXPECT_DOUBLE_EQ(pool.getThreadUtilization(), 0.0);
+    EXPECT_DOUBLE_EQ(pool.getQueueUtilization(), 0.0);
+    EXPECT_FALSE(pool.isQueueFull());
+    
+    // Change thread count and queue size
+    pool.setThreadCount(4);
+    pool.setMaxQueueSize(20);
+    
+    EXPECT_EQ(pool.getThreadCount(), 4);
+    EXPECT_EQ(pool.getMaxQueueSize(), 20);
+    
+    auto workerIds = pool.getWorkerIds();
+    EXPECT_EQ(workerIds.size(), 4);
+    
+    // Submit mixed priority tasks
+    std::atomic<int> execution_counter{0};
+    std::vector<std::future<void>> futures;
+    
+    // High priority tasks
+    for (int i = 0; i < 3; ++i) {
+        futures.push_back(pool.submitWithPriority(neko::Priority::High, [&execution_counter]() {
+            std::this_thread::sleep_for(20ms);
+            execution_counter.fetch_add(1);
+        }));
+    }
+    
+    // Worker-specific tasks
+    for (size_t i = 0; i < workerIds.size(); ++i) {
+        futures.push_back(pool.submitToWorker(workerIds[i], [&execution_counter]() {
+            std::this_thread::sleep_for(15ms);
+            execution_counter.fetch_add(1);
+        }));
+    }
+    
+    // Normal priority tasks
+    for (int i = 0; i < 3; ++i) {
+        futures.push_back(pool.submit([&execution_counter]() {
+            std::this_thread::sleep_for(10ms);
+            execution_counter.fetch_add(1);
+        }));
+    }
+    
+    std::this_thread::sleep_for(10ms);
+    
+    // Check utilization during execution
+    EXPECT_GT(pool.getThreadUtilization(), 0.0);
+    EXPECT_GT(pool.getPendingTaskCount(), 0);
+    EXPECT_GT(pool.getQueueUtilization(), 0.0);
+    
+    // Wait for completion with timeout
+    bool completed = pool.waitForCompletion(2000ms);
+    EXPECT_TRUE(completed);
+    
+    // Wait for all futures
+    for (auto& future : futures) {
+        future.wait();
+    }
+    
+    // Verify final state
+    EXPECT_EQ(execution_counter.load(), 10);  // 3 + 4 + 3 tasks
+    EXPECT_EQ(pool.getPendingTaskCount(), 0);
+    EXPECT_DOUBLE_EQ(pool.getQueueUtilization(), 0.0);
+    
+    // Test downsizing
+    pool.setThreadCount(2);
+    EXPECT_EQ(pool.getThreadCount(), 2);
+    
+    // Verify downsized pool still works
+    auto final_future = pool.submit([]() { return 42; });
+    EXPECT_EQ(final_future.get(), 42);
+}
+
+TEST_F(ThreadPoolTest, StressTestAllFeatures) {
+    ThreadPool pool(1);
+    
+    // Start with small configuration
+    pool.setMaxQueueSize(50);
+    
+    std::atomic<int> total_executed{0};
+    std::vector<std::future<void>> all_futures;
+    
+    // Phase 1: Single thread, mixed priorities
+    for (int i = 0; i < 10; ++i) {
+        neko::Priority priority = (i % 3 == 0) ? neko::Priority::High :
+                                 (i % 3 == 1) ? neko::Priority::Normal :
+                                                neko::Priority::Low;
+        all_futures.push_back(pool.submitWithPriority(priority, [&total_executed]() {
+            std::this_thread::sleep_for(5ms);
+            total_executed.fetch_add(1);
+        }));
+    }
+    
+    // Phase 2: Scale up threads
+    pool.setThreadCount(4);
+    auto worker_ids = pool.getWorkerIds();
+    
+    // Submit worker-specific tasks
+    for (int i = 0; i < 20; ++i) {
+        all_futures.push_back(pool.submitToWorker(worker_ids[i % worker_ids.size()], [&total_executed]() {
+            std::this_thread::sleep_for(3ms);
+            total_executed.fetch_add(1);
+        }));
+    }
+    
+    // Phase 3: Regular submissions with queue monitoring
+    int batch_size = 15;
+    for (int i = 0; i < batch_size; ++i) {
+        if (!pool.isQueueFull()) {
+            all_futures.push_back(pool.submit([&total_executed]() {
+                std::this_thread::sleep_for(2ms);
+                total_executed.fetch_add(1);
+            }));
+        }
+    }
+    
+    // Phase 4: Scale down while tasks are running
+    std::this_thread::sleep_for(10ms);
+    pool.setThreadCount(2);
+    
+    // Wait for all tasks to complete
+    bool completed = pool.waitForCompletion(3000ms);
+    EXPECT_TRUE(completed);
+    
+    for (auto& future : all_futures) {
+        future.wait();
+    }
+    
+    // Verify all tasks executed
+    EXPECT_EQ(total_executed.load(), all_futures.size());
+    EXPECT_EQ(pool.getThreadCount(), 2);
+    EXPECT_EQ(pool.getPendingTaskCount(), 0);
 }
 
 TEST_F(ThreadPoolTest, MixedSubmissionWithTimeout) {
