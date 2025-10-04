@@ -14,6 +14,13 @@ if(NEKO_AUTO_FETCH_DEPS)
     )
     FetchContent_MakeAvailable(NekoSchema)
 
+    FetchContent_Declare(
+        nlog
+        GIT_REPOSITORY https://github.com/moehoshio/nlog.git
+        GIT_TAG        main
+    )
+    FetchContent_MakeAvailable(nlog)
+
     if(NEKO_BUILD_TESTS)
         find_package(GTest QUIET)
 
@@ -43,7 +50,7 @@ target_include_directories(NekoThreadPool INTERFACE
 )
 
 # Dependencies
-target_link_libraries(NekoThreadPool INTERFACE NekoSchema)
+target_link_libraries(NekoThreadPool INTERFACE NekoSchema Neko::Log)
 target_compile_features(NekoThreadPool INTERFACE cxx_std_20)
 
 if(NEKO_BUILD_TESTS)

@@ -4,13 +4,12 @@ An easy-to-use and efficient C++ 20 thread pool that supports task priorities, s
 
 [![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
 ![Require](https://img.shields.io/badge/%20Require%20-%3E=%20C++%2020-orange.svg)
-
+[![CMake](https://img.shields.io/badge/CMake-3.14+-green.svg)](https://cmake.org/)
 
 ## Features
 
 - **Task Priority** - Support for tasks with different priorities
 - **Personal Task Queue** - Support for assigning tasks to specific threads
-- **Statistics Collection** - Detailed task execution statistics and execution time monitoring
 - **Dynamic Management** - Support for adjusting thread count and maximum queue size at runtime
 
 ## Requirements
@@ -22,13 +21,9 @@ An easy-to-use and efficient C++ 20 thread pool that supports task priorities, s
 
 Configuration: [CMake](#cmake) | [Manual](#manual)
 
-Example: [Basic Usage](#basic-usage) | [Tasks with Parameters](#tasks-with-parameters) | [](#set-maximum-queue-size) | [Dynamic Thread Count Adjustment](#dynamic-thread-count-adjustment) | [Custom Logging](#custom-logging) | [Statistics Control](#statistics-control) | [Error Handling](#error-handling)
+Example: [Basic Usage](#basic-usage) | [Tasks with Parameters](#tasks-with-parameters) | [](#set-maximum-queue-size) | [Dynamic Thread Count Adjustment](#dynamic-thread-count-adjustment) | [Error Handling](#error-handling)
 
 Advanced: [Task Priority](#task-priority) | [Assign Tasks to Specific Threads](#assign-tasks-to-specific-threads) | [Waiting for Task Completion](#waiting-for-task-completion)
-
-Statistics and Monitoring: [Get Statistics Information](#get-statistics-information) | [Real-time Utilization Monitoring](#real-time-utilization-monitoring)
-
-API Reference: [Core Methods](#core-methods) | [Configuration Methods](#configuration-methods) | [Query Methods](#query-methods)
 
 ### CMake
 
@@ -44,6 +39,9 @@ FetchContent_Declare(
     GIT_TAG        main
 )
 FetchContent_MakeAvailable(NekoThreadPool)
+
+# Add your target and link NekoLog
+add_executable(your_target main.cpp)
 
 target_link_libraries(your_target PRIVATE NekoThreadPool)
 ```
@@ -231,72 +229,6 @@ int main() {
 }
 ```
 
-## Statistics and Monitoring
-
-### Get Statistics Information
-
-```cpp
-#include <neko/core/threadPool.hpp>
-#include <iostream>
-
-int main() {
-    neko::core::thread::ThreadPool pool;
-    
-    // Submit some tasks
-    for (int i = 0; i < 100; ++i) {
-        pool.submit([i]() {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            return i * i;
-        });
-    }
-    
-    // Wait for completion
-    pool.waitForAllTasksCompletion();
-    
-    // Get statistics information
-    auto stats = pool.getTaskStats();
-    
-    std::cout << "Completed tasks: " << stats.completedTasks << std::endl;
-    std::cout << "Failed tasks: " << stats.failedTasks << std::endl;
-    std::cout << "Total execution time: " << stats.totalExecutionTime.count() << "ms\n";
-    std::cout << "Max execution time: " << stats.maxExecutionTime.count() << "ms\n";
-    std::cout << "Average execution time: " << stats.avgExecutionTime.count() << "ms\n";
-    
-    return 0;
-}
-```
-
-### Real-time Utilization Monitoring
-
-```cpp
-#include <neko/core/threadPool.hpp>
-#include <iostream>
-#include <thread>
-
-int main() {
-    neko::core::thread::ThreadPool pool(4);
-    
-    // Submit long-running tasks
-    for (int i = 0; i < 10; ++i) {
-        pool.submit([]() {
-            std::this_thread::sleep_for(std::chrono::seconds(2));
-        });
-    }
-    
-    // Monitor thread pool status
-    for (int i = 0; i < 5; ++i) {
-        std::cout << "Queue utilization: " << pool.getQueueUtilization() * 100 << "%\n";
-        std::cout << "Thread utilization: " << pool.getThreadUtilization() * 100 << "%\n";
-        std::cout << "Pending tasks: " << pool.getPendingTaskCount() << std::endl;
-        std::cout << "---\n";
-        
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    }
-    
-    return 0;
-}
-```
-
 ## Configuration Options
 
 ### Set Maximum Queue Size
@@ -327,34 +259,6 @@ std::cout << "Adjusted thread count: " << pool.getThreadCount() << std::endl;
 // Decrease threads
 pool.setThreadCount(4);
 std::cout << "Final thread count: " << pool.getThreadCount() << std::endl;
-```
-
-### Custom Logging
-
-```cpp
-neko::core::thread::ThreadPool pool;
-
-// Set logger function
-pool.setLogger([](const std::string& message) {
-    std::cout << "[ThreadPool] " << message << std::endl;
-});
-
-// Now the thread pool will log important events
-```
-
-### Statistics Control
-
-```cpp
-neko::core::thread::ThreadPool pool;
-
-// Disable statistics (improve performance)
-pool.enableStatistics(false);
-
-// Re-enable statistics
-pool.enableStatistics(true);
-
-// Reset statistics data
-pool.resetStats();
 ```
 
 ## Error Handling
@@ -391,41 +295,15 @@ int main() {
 }
 ```
 
-## API Reference
-
-### Core Methods
-
-| Method | Description |
-|--------|-------------|
-| `submit(function, args...)` | Submit normal priority task |
-| `submitWithPriority(priority, function, args...)` | Submit task with specified priority |
-| `submitToWorker(workerId, function, args...)` | Submit task to specific thread |
-| `waitForTasksEmpty()` | Wait for queue to be empty |
-| `waitForAllTasksCompletion()` | Wait for all tasks to complete |
-| `stop(waitForCompletion)` | Stop thread pool |
-
-### Configuration Methods
-
-| Method | Description |
-|--------|-------------|
-| `setThreadCount(count)` | Set thread count |
-| `setMaxQueueSize(size)` | Set maximum queue size |
-| `enableStatistics(enable)` | Enable/disable statistics |
-| `setLogger(loggerFunc)` | Set logger function |
-| `resetStats()` | Reset statistics data |
-
-### Query Methods
-
-| Method | Description |
-|--------|-------------|
-| `getThreadCount()` | Get thread count |
-| `getPendingTaskCount()` | Get pending task count |
-| `getTaskStats()` | Get task statistics |
-| `getQueueUtilization()` | Get queue utilization |
-| `getThreadUtilization()` | Get thread utilization |
-| `isEmpty()` | Check if no tasks |
-| `isQueueFull()` | Check if queue is full |
-
 ## License
 
 [License](LICENSE) MIT OR Apache-2.0
+
+## See More
+
+- [NekoLog](https://github.com/moehoshio/nlog): An easy-to-use, modern, lightweight, and efficient C++20 logging library.
+- [NekoEvent](https://github.com/moehoshio/NekoEvent): A modern easy to use type-safe and high-performance event handling system for C++.
+- [NekoSchema](https://github.com/moehoshio/NekoSchema): A lightweight, header-only C++20 schema library.
+- [NekoSystem](https://github.com/moehoshio/NekoSystem): A modern C++20 cross-platform system utility library.
+- [NekoFunction](https://github.com/moehoshio/NekoFunction): A comprehensive modern C++ utility library that provides practical functions for common programming tasks.
+- [NekoThreadPool](https://github.com/moehoshio/NekoThreadPool): An easy to use and efficient C++ 20 thread pool that supports priorities and submission to specific threads.

@@ -7,6 +7,7 @@
  */
 #pragma once
 
+#include <neko/log/nlog.hpp>
 #include <neko/schema/exception.hpp>
 #include <neko/schema/types.hpp>
 
@@ -36,11 +37,10 @@ namespace neko::core::thread {
 
     struct Task {
         std::function<void()> function;
-        neko::Priority priority;
-        TaskId id;
+        neko::Priority priority{neko::Priority::Normal};
+        TaskId id{0};
 
-        Task() : function(nullptr), priority(neko::Priority::Normal), id(0) {}
-
+        Task() = default;
         Task(std::function<void()> func, neko::Priority prio, TaskId taskId)
             : function(std::move(func)), priority(prio), id(taskId) {}
 
@@ -56,37 +56,37 @@ namespace neko::core::thread {
         }
 
         bool hasTask() const noexcept {
-            return function != nullptr;
+            return static_cast<bool>(function);
         }
     };
 
     class WorkerInfo {
     private:
         std::atomic<bool> shouldStop{false};
-        std::unique_ptr<std::thread> thread;
-        neko::uint64 id;
+        std::thread thread;
+        neko::uint64 id{0};
+
         std::queue<Task> personalTaskQueue;
         mutable std::shared_mutex personalTaskMutex;
 
     public:
-        WorkerInfo(std::unique_ptr<std::thread> &&t, neko::uint64 i)
-            : thread(std::move(t)), id(i) {}
-
-        WorkerInfo(WorkerInfo &&other) noexcept
-            : thread(std::move(other.thread)),
-              id(other.id),
-              personalTaskQueue(std::move(other.personalTaskQueue)) {}
-        WorkerInfo &operator=(WorkerInfo &&other) noexcept {
-            if (this != &other) {
-                thread = std::move(other.thread);
-                id = other.id;
-                personalTaskQueue = std::move(other.personalTaskQueue);
-            }
-            return *this;
-        }
+        WorkerInfo() = default;
+        explicit WorkerInfo(neko::uint64 i) : id(i) {}
 
         WorkerInfo(const WorkerInfo &) = delete;
         WorkerInfo &operator=(const WorkerInfo &) = delete;
+        WorkerInfo(WorkerInfo &&) = delete;
+        WorkerInfo &operator=(WorkerInfo &&) = delete;
+
+        ~WorkerInfo() noexcept {
+            if (isActive()) {
+                cleanup();
+            }
+        }
+
+        void addWorker(std::thread &&t) {
+            thread = std::move(t);
+        }
 
         void postTask(const Task &task) {
             std::lock_guard<std::shared_mutex> lock(personalTaskMutex);
@@ -98,7 +98,17 @@ namespace neko::core::thread {
             personalTaskQueue.push(std::move(task));
         }
 
-        void tryRunPersonalTasks() {
+        std::optional<Task> fetchOnePersonal() {
+            std::lock_guard<std::shared_mutex> lk(personalTaskMutex);
+            if (personalTaskQueue.empty()) {
+                return std::nullopt;
+            }
+            Task task = std::move(personalTaskQueue.front());
+            personalTaskQueue.pop();
+            return task;
+        }
+
+        void tryRunAllPersonalTasks() {
             std::lock_guard<std::shared_mutex> lock(personalTaskMutex);
             while (!personalTaskQueue.empty()) {
                 Task task = std::move(personalTaskQueue.front());
@@ -126,14 +136,14 @@ namespace neko::core::thread {
         }
 
         bool isActive() const noexcept {
-            return thread && thread->joinable();
+            return thread.joinable();
         }
 
         void setShouldStop(bool value) noexcept {
-            shouldStop.store(value);
+            shouldStop.store(value, std::memory_order_release);
         }
 
-        void cleanup(bool waitForCompletion = true) noexcept {
+        void cleanup() noexcept {
             setShouldStop(true);
 
             if (!isActive()) {
@@ -141,11 +151,7 @@ namespace neko::core::thread {
             }
 
             try {
-                if (waitForCompletion) {
-                    thread->join();
-                } else {
-                    thread->detach();
-                }
+                thread.join();
             } catch (const std::system_error &) {
                 return;
             }
@@ -155,7 +161,7 @@ namespace neko::core::thread {
     class ThreadPool {
     private:
         // Worker and global task queue
-        std::vector<WorkerInfo> workers;
+        std::vector<std::unique_ptr<WorkerInfo>> workers;
         std::priority_queue<Task> globalTaskQueue;
 
         mutable std::shared_mutex workerMutex;
@@ -163,81 +169,80 @@ namespace neko::core::thread {
         std::condition_variable_any globalTaskQueueCondVar;
 
         // Stop flag and task counters
-        std::atomic<bool> isStop{false};
+        std::atomic<bool> stopping{false};
+
         std::atomic<TaskId> nextTaskId{0};
         std::atomic<neko::uint64> nextWorkerId{0};
-        std::atomic<neko::uint64> activeTasks{0};
+
+        std::atomic<neko::uint64> globalActiveTasks{0};
         std::atomic<neko::uint64> maxQueueSize{100000};
 
         /**
          * @brief Worker thread function that processes tasks.
          */
-        void workerThread(neko::uint64 workerId) {
-            WorkerInfo *self = nullptr;
+        static void workerLoop(ThreadPool *pool, WorkerInfo *self) {
 
-            {
-                std::shared_lock<std::shared_mutex> lock(workerMutex);
-                for (auto &worker : workers) {
-                    if (worker.isActive() && workerId == worker.getId()) {
-                        self = &worker;
-                        break;
+            for (;;) {
+
+                { // Check for personal tasks first
+                    if (self->hasPersonalTasks()) {
+                        self->tryRunAllPersonalTasks();
+                        continue;
                     }
                 }
-            }
 
-            while (true) {
+                if (self->isStopping()) {
+                    return;
+                }
 
-                if (self) {
-                    self->tryRunPersonalTasks();
+                Task gTask;
 
-                    if (self->isStopping()) {
+                { // Check for global tasks
+                    std::unique_lock<std::shared_mutex> lk(pool->globalTaskQueueMutex);
+
+                    if ((pool->stopping.load(std::memory_order_acquire) || self->isStopping()) && pool->globalTaskQueue.empty() && !self->hasPersonalTasks()) {
                         return;
                     }
-                }
 
-                Task task;
-
-                {
-                    std::unique_lock<std::shared_mutex> lock(globalTaskQueueMutex);
-
-                    // Wake-up condition: isStop or there is a global task or the worker has personal tasks or the worker is stopping
-                    globalTaskQueueCondVar.wait(lock, [this, self] {
-                        return isStop.load() || !globalTaskQueue.empty() || self->hasPersonalTasks() || self->isStopping();
+                    pool->globalTaskQueueCondVar.wait(lk, [&] {
+                        return pool->stopping.load(std::memory_order_acquire) || self->isStopping() || !pool->globalTaskQueue.empty() || self->hasPersonalTasks();
                     });
 
-                    if (isStop.load() && globalTaskQueue.empty()) {
-                        return;
-                    }
-
-                    if (!globalTaskQueue.empty()) {
-                        task = std::move(const_cast<Task &>(globalTaskQueue.top()));
-                        globalTaskQueue.pop();
-                        ++activeTasks;
+                    if (!pool->globalTaskQueue.empty()) {
+                        const Task &top = pool->globalTaskQueue.top();
+                        gTask = top; // 複製（Task 輕量,function 共享小型）
+                        pool->globalTaskQueue.pop();
+                        pool->globalActiveTasks.fetch_add(1, std::memory_order_acq_rel);
                     }
                 }
 
-                if (task.hasTask()) {
+                // Execute the global task outside the lock
+                if (gTask.hasTask()) {
                     try {
-                        task.function();
+                        gTask.function();
                     } catch (...) {
                     }
-                    --activeTasks;
+                    pool->globalActiveTasks.fetch_sub(1, std::memory_order_acq_rel);
                 }
             }
         }
 
-        void createWorker() {
+        void addWorker() {
             std::unique_lock<std::shared_mutex> lock(workerMutex);
-            
-            neko::uint64 workerId = nextWorkerId++;
-            WorkerInfo workerInfo(std::make_unique<std::thread>(&ThreadPool::workerThread, this, workerId), workerId);
-            workers.push_back(std::move(workerInfo));
+
+            auto id = nextWorkerId.fetch_add(1, std::memory_order_acq_rel);
+            auto w = std::make_unique<WorkerInfo>(id);
+            WorkerInfo *raw = w.get();
+            raw->addWorker(std::thread(&ThreadPool::workerLoop, this, raw));
+            workers.push_back(std::move(w));
         }
 
-        void createWorkerUnsafe() {
-            neko::uint64 workerId = nextWorkerId++;
-            WorkerInfo workerInfo(std::make_unique<std::thread>(&ThreadPool::workerThread, this, workerId), workerId);
-            workers.push_back(std::move(workerInfo));
+        void addWorkerUnsafe() {
+            auto id = nextWorkerId.fetch_add(1, std::memory_order_acq_rel);
+            auto w = std::make_unique<WorkerInfo>(id);
+            WorkerInfo *raw = w.get();
+            raw->addWorker(std::thread(&ThreadPool::workerLoop, this, raw));
+            workers.push_back(std::move(w));
         }
 
     public:
@@ -248,12 +253,16 @@ namespace neko::core::thread {
 
             workers.reserve(threadCount);
             for (neko::uint64 i = 0; i < threadCount; ++i) {
-                createWorker();
+                addWorkerUnsafe();
             }
         }
 
         ~ThreadPool() noexcept {
-            stop();
+            try {
+                stop();
+            } catch (...) {
+                // do nothing
+            }
         }
 
         ThreadPool(const ThreadPool &) = delete;
@@ -293,13 +302,13 @@ namespace neko::core::thread {
 
             using ReturnType = std::invoke_result_t<std::decay_t<F>, std::decay_t<Args>...>;
 
-            if (isStop.load()) {
+            if (stopping.load()) {
                 throw ex::ProgramExit("Cannot submit tasks to stopped thread pool");
             }
 
             auto task = std::make_shared<std::packaged_task<ReturnType()>>(
-                [function, args...]() mutable -> ReturnType {
-                    return std::invoke(std::forward<F>(function), std::forward<Args>(args)...);
+                [fn = std::forward<F>(function), ... capArgs = std::forward<Args>(args)]() mutable -> ReturnType {
+                    return std::invoke(std::move(fn), std::move(capArgs)...);
                 });
 
             std::future<ReturnType> result = task->get_future();
@@ -332,16 +341,16 @@ namespace neko::core::thread {
             -> std::future<std::invoke_result_t<F, Args...>> {
             using ReturnType = std::invoke_result_t<std::decay_t<F>, std::decay_t<Args>...>;
 
-            if (isStop.load()) {
+            if (stopping.load()) {
                 throw ex::ProgramExit("Cannot submit tasks to stopped thread pool");
             }
 
             WorkerInfo *self = nullptr;
             {
-                std::shared_lock<std::shared_mutex> lock(workerMutex);
-                for (auto &worker : workers) {
-                    if (worker.isActive() && workerId == worker.getId()) {
-                        self = &worker;
+                std::shared_lock<std::shared_mutex> lk(workerMutex);
+                for (auto &w : workers) {
+                    if (w->getId() == workerId) {
+                        self = w.get();
                         break;
                     }
                 }
@@ -351,18 +360,19 @@ namespace neko::core::thread {
                 throw ex::OutOfRange("Worker not found with ID: " + std::to_string(workerId));
 
             auto task = std::make_shared<std::packaged_task<ReturnType()>>(
-                [function, args...]() mutable -> ReturnType {
-                    return std::invoke(std::forward<F>(function), std::forward<Args>(args)...);
+                [fn = std::forward<F>(function), ... capArgs = std::forward<Args>(args)]() mutable -> ReturnType {
+                    return std::invoke(std::move(fn), std::move(capArgs)...);
                 });
 
-            std::future<ReturnType> result = task->get_future();
-            TaskId taskId = ++nextTaskId;
+            TaskId taskId = nextTaskId.fetch_add(1, std::memory_order_acq_rel);
             Task personalTask{[task]() { (*task)(); }, neko::Priority::Normal, taskId};
-            self->postTask(personalTask);
+            {
+                self->postTask(std::move(personalTask));
+            }
 
             // Try to wake the specific worker (only the targeted worker will be woken unless there are global tasks)
             globalTaskQueueCondVar.notify_all();
-            return result;
+            return task->get_future();
         }
 
         // ===================
@@ -373,12 +383,11 @@ namespace neko::core::thread {
          * @brief Wait for all global tasks to complete.
          *
          * Blocks until the global task queue is empty and there are no active tasks.
-         * @note This does not account for any per-worker personal task queues.
          */
-        void waitForCompletion() {
+        void waitForGlobalTasks() {
             while (true) {
                 std::shared_lock<std::shared_mutex> lock(globalTaskQueueMutex);
-                if (globalTaskQueue.empty() && activeTasks.load() == 0) {
+                if (globalTaskQueue.empty() && globalActiveTasks.load() == 0) {
                     return;
                 }
                 lock.unlock();
@@ -392,12 +401,12 @@ namespace neko::core::thread {
          * @return True if all tasks completed within the timeout, false otherwise.
          */
         template <typename Rep, typename Period>
-        bool waitForCompletion(std::chrono::duration<Rep, Period> duration) {
+        bool waitForGlobalTasks(std::chrono::duration<Rep, Period> duration) {
             auto endTime = std::chrono::steady_clock::now() + duration;
 
             while (std::chrono::steady_clock::now() < endTime) {
                 std::shared_lock<std::shared_mutex> lock(globalTaskQueueMutex);
-                if (globalTaskQueue.empty() && activeTasks.load() == 0) {
+                if (globalTaskQueue.empty() && globalActiveTasks.load() == 0) {
                     return true;
                 }
                 lock.unlock();
@@ -411,54 +420,78 @@ namespace neko::core::thread {
          * @param waitForTasks Whether to wait for all tasks to complete before stopping.
          */
         void stop(bool waitForTasks = true) {
+            // Check if already stopping to avoid double-stop
+            bool expected = false;
+            if (!stopping.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+                // Already stopping or stopped
+                return;
+            }
 
-            isStop.store(true);
+            if (waitForTasks) {
+                waitForGlobalTasks();
+            }
+
+            {
+                std::lock_guard<std::shared_mutex> lk(workerMutex);
+                for (auto &w : workers) {
+                    w->setShouldStop(true);
+                }
+            }
+
             globalTaskQueueCondVar.notify_all();
 
             for (auto &worker : workers) {
-                if (worker.isActive()) {
-                    worker.cleanup(waitForTasks);
-                }
+                worker->cleanup();
             }
         }
 
         /**
          * @brief Set the thread count.
-         * @param threadCount The new thread count.
+         * @param newThreadCount The new thread count.
          * @note If downsizing threads, running tasks will not be interrupted; excess threads will be reclaimed after completing their tasks.
          * @throws ex::ProgramExit if the thread pool is stopped.
          */
-        void setThreadCount(neko::uint64 threadCount) {
-            if (isStop.load()) {
+        void setThreadCount(neko::uint64 newThreadCount) {
+            if (stopping.load()) {
                 throw ex::ProgramExit("Cannot resize stopped thread pool");
             }
 
-            std::unique_lock<std::shared_mutex> lock(workerMutex);
-            if (threadCount == 0) {
-                threadCount = 1;
+            if (newThreadCount == 0) {
+                newThreadCount = 1;
             }
 
-            if (threadCount == workers.size()) {
-                return;
-            }
+            std::vector<std::unique_ptr<WorkerInfo>> removed;
 
-            if (threadCount > workers.size()) {
-                // Add more workers
-                while (workers.size() < threadCount) {
-                    createWorkerUnsafe();
+            {
+                std::unique_lock<std::shared_mutex> lock(workerMutex);
+                
+                if (newThreadCount == workers.size()) {
+                    return;
                 }
-            } else if (threadCount < workers.size()) {
-                // Remove excess workers
 
-                while (workers.size() > threadCount) {
-                    WorkerInfo &w = workers.back();
-                    w.setShouldStop(true);
-                    globalTaskQueueCondVar.notify_all();
-
-                    w.cleanup(true);
-                    workers.pop_back();
-                }                
+                if (newThreadCount > workers.size()) {
+                    while (workers.size() < newThreadCount) {
+                        addWorkerUnsafe();
+                    }
+                } else {
+                    while (workers.size() > newThreadCount) {
+                        removed.push_back(std::move(workers.back()));
+                        workers.pop_back();
+                    }
+                }
             }
+
+            // For removed workers: request stop, wake them, and join
+            if (!removed.empty()) {
+                for (auto &w : removed) {
+                    w->setShouldStop(true);
+                }
+                globalTaskQueueCondVar.notify_all();
+                for (auto &w : removed) {
+                    w->cleanup();
+                }
+            }
+
         }
 
         /**
@@ -477,7 +510,7 @@ namespace neko::core::thread {
             std::shared_lock<std::shared_mutex> lock(workerMutex);
             std::vector<neko::uint64> ids;
             for (const auto &w : workers) {
-                ids.push_back(w.getId());
+                ids.push_back(w->getId());
             }
             return ids;
         }
@@ -523,7 +556,7 @@ namespace neko::core::thread {
          */
         double getThreadUtilization() const noexcept {
             auto totalThreads = workers.size();
-            auto activeThreads = activeTasks.load();
+            auto activeThreads = globalActiveTasks.load();
             if (totalThreads == 0)
                 return 0.0;
             return static_cast<double>(activeThreads) / totalThreads;
