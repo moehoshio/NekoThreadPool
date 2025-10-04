@@ -7,7 +7,6 @@
  */
 #pragma once
 
-#include <neko/log/nlog.hpp>
 #include <neko/schema/exception.hpp>
 #include <neko/schema/types.hpp>
 
