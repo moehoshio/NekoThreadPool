@@ -26,6 +26,10 @@
 #include <unordered_set>
 #include <vector>
 
+/**
+ * @brief Thread pool
+ * @namespace neko::core::thread
+ */
 namespace neko::core::thread {
 
     using TaskId = neko::uint64;
@@ -40,6 +44,10 @@ namespace neko::core::thread {
         Task(std::function<void()> func, neko::Priority prio, TaskId taskId)
             : function(std::move(func)), priority(prio), id(taskId) {}
 
+        /**
+         * @brief Compare two tasks for priority.
+         * @note  priority > id
+         */
         bool operator<(const Task &other) const {
             if (priority != other.priority) {
                 return priority < other.priority;
@@ -133,6 +141,7 @@ namespace neko::core::thread {
 
     class ThreadPool {
     private:
+        // Worker and global task queue
         std::vector<WorkerInfo> workers;
         std::priority_queue<Task> globalTaskQueue;
 
@@ -140,11 +149,16 @@ namespace neko::core::thread {
         mutable std::shared_mutex globalTaskQueueMutex;
         std::condition_variable_any globalTaskQueueCondVar;
 
+        // Stop flag and task counters
         std::atomic<bool> isStop{false};
         std::atomic<TaskId> nextTaskId{0};
+        std::atomic<neko::uint64> nextWorkerId{0};
         std::atomic<neko::uint64> activeTasks{0};
         std::atomic<neko::uint64> maxQueueSize{100000};
 
+        /**
+         * @brief Worker thread function that processes tasks.
+         */
         void workerThread(neko::uint64 workerId) {
             WorkerInfo *self = nullptr;
 
@@ -195,8 +209,10 @@ namespace neko::core::thread {
             }
         }
 
-        void createWorker(neko::uint64 workerId) {
+        void createWorker() {
             std::lock_guard<std::mutex> lock(workerMutex);
+
+            neko::uint64 workerId = nextWorkerId++;
             WorkerInfo workerInfo(std::make_unique<std::thread>(&ThreadPool::workerThread, this, workerId), workerId);
             workers.push_back(std::move(workerInfo));
         }
@@ -209,7 +225,7 @@ namespace neko::core::thread {
 
             workers.reserve(threadCount);
             for (neko::uint64 i = 0; i < threadCount; ++i) {
-                createWorker(i);
+                createWorker();
             }
         }
 
@@ -222,11 +238,32 @@ namespace neko::core::thread {
         ThreadPool(ThreadPool &&) = delete;
         ThreadPool &operator=(ThreadPool &&) = delete;
 
+        // ===================
+        // === Submit Task ===
+        // ===================
+
+        /**
+         * @brief Submit a task with normal priority.
+         * @param function The function to execute.
+         * @param args The arguments to pass to the function.
+         * @return A future representing the result of the task.
+         * @throws ex::ProgramExit if the thread pool is stopped.
+         * @throws ex::TaskRejected if the task is rejected.
+         */
         template <typename F, typename... Args>
         auto submit(F &&function, Args &&...args) -> std::future<std::invoke_result_t<F, Args...>> {
             return submitWithPriority(neko::Priority::Normal, std::forward<F>(function), std::forward<Args>(args)...);
         }
 
+        /**
+         * @brief Submit a task with a specific priority.
+         * @param priority The priority of the task.
+         * @param function The function to execute.
+         * @param args The arguments to pass to the function.
+         * @return A future representing the result of the task.
+         * @throws ex::ProgramExit if the thread pool is stopped.
+         * @throws ex::TaskRejected if the task is rejected.
+         */
         template <typename F, typename... Args>
         auto submitWithPriority(neko::Priority priority, F &&function, Args &&...args)
             -> std::future<std::invoke_result_t<F, Args...>> {
@@ -259,6 +296,14 @@ namespace neko::core::thread {
             return result;
         }
 
+        /**
+         * @brief Submit a task to a specific worker thread.
+         * @param workerId The ID of the worker thread.
+         * @param function The function to execute.
+         * @param args The arguments to pass to the function.
+         * @return A future representing the result of the task.
+         * @throws ex::OutOfRange if the worker thread is not found.
+         */
         template <typename F, typename... Args>
         auto submitToWorker(neko::uint64 workerId, F &&function, Args &&...args)
             -> std::future<std::invoke_result_t<F, Args...>> {
@@ -297,7 +342,16 @@ namespace neko::core::thread {
             return result;
         }
 
-        // Wait for global tasks to complete
+        // ===================
+        // ===== Control =====
+        // ===================
+
+        /**
+         * @brief Wait for all global tasks to complete.
+         *
+         * Blocks until the global task queue is empty and there are no active tasks.
+         * @note This does not account for any per-worker personal task queues.
+         */
         void waitForCompletion() {
             while (true) {
                 std::shared_lock<std::shared_mutex> lock(globalTaskQueueMutex);
@@ -309,21 +363,30 @@ namespace neko::core::thread {
             }
         }
 
-        // Wait for global tasks to complete with timeout
+        /**
+         * @brief Wait for all tasks to complete with a timeout.
+         * @param timeout The duration to wait before giving up.
+         * @return True if all tasks completed within the timeout, false otherwise.
+         */
         template <typename Rep, typename Period>
-        void waitForCompletion(std::chrono::duration<Rep, Period> duration) {
+        bool waitForCompletion(std::chrono::duration<Rep, Period> duration) {
             auto endTime = std::chrono::steady_clock::now() + duration;
 
             while (std::chrono::steady_clock::now() < endTime) {
                 std::shared_lock<std::shared_mutex> lock(globalTaskQueueMutex);
                 if (globalTaskQueue.empty() && activeTasks.load() == 0) {
-                    return;
+                    return true;
                 }
                 lock.unlock();
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
+            return false;
         }
 
+        /**
+         * @brief Stop the thread pool.
+         * @param waitForCompletion Whether to wait for all tasks to complete before stopping.
+         */
         void stop(bool waitForTasks = true) {
 
             isStop.store(true);
@@ -336,6 +399,18 @@ namespace neko::core::thread {
             }
         }
 
+        /**
+         * @brief Set the maximum queue size.
+         * @param maxSize The maximum number of tasks allowed in the queue.
+         */
+        void setMaxQueueSize(neko::uint64 maxSize) noexcept {
+            maxQueueSize.store(maxSize);
+        }
+
+        /**
+         * @brief Get all available worker thread IDs.
+         * @return A vector of worker IDs.
+         */
         std::vector<neko::uint64> getWorkerIds() const {
             std::lock_guard<std::mutex> lock(workerMutex);
             std::vector<neko::uint64> ids;
@@ -345,33 +420,44 @@ namespace neko::core::thread {
             return ids;
         }
 
+        /**
+         * @brief Get the total number of worker threads.
+         * @return The total number of worker threads.
+         */
         neko::uint64 getThreadCount() const noexcept {
             return workers.size();
         }
 
+        /**
+         * @brief Get the total number of pending tasks.
+         * @return The total number of pending tasks.
+         */
         neko::uint64 getPendingTaskCount() const {
             std::shared_lock<std::shared_mutex> lock(globalTaskQueueMutex);
             return globalTaskQueue.size();
         }
 
-        bool isEmpty() const {
-            std::shared_lock<std::shared_mutex> lock(globalTaskQueueMutex);
-            return globalTaskQueue.empty() && activeTasks.load() == 0;
-        }
-
-        void setMaxQueueSize(neko::uint64 maxSize) noexcept {
-            maxQueueSize.store(maxSize);
-        }
-
+        /**
+         * @brief Get the maximum queue size.
+         * @return The maximum queue size.
+         */
         neko::uint64 getMaxQueueSize() const noexcept {
             return maxQueueSize.load();
         }
 
+        /**
+         * @brief Check if the task queue is full.
+         * @return True if the queue is full, false otherwise.
+         */
         bool isQueueFull() const {
             std::shared_lock<std::shared_mutex> lock(globalTaskQueueMutex);
             return globalTaskQueue.size() >= maxQueueSize.load();
         }
 
+        /**
+         * @brief Get the thread utilization as a percentage.
+         * @return The thread utilization percentage.
+         */
         double getThreadUtilization() const noexcept {
             auto totalThreads = workers.size();
             auto activeThreads = activeTasks.load();
@@ -380,6 +466,10 @@ namespace neko::core::thread {
             return static_cast<double>(activeThreads) / totalThreads;
         }
 
+        /**
+         * @brief Get the current queue utilization as a percentage.
+         * @return The queue utilization percentage.
+         */
         double getQueueUtilization() const {
             std::shared_lock<std::shared_mutex> lock(globalTaskQueueMutex);
             auto maxSize = maxQueueSize.load();
