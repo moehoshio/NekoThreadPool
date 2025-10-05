@@ -21,7 +21,7 @@ An easy-to-use and efficient C++ 20 thread pool that supports task priorities, s
 
 Configuration: [CMake](#cmake) | [Manual](#manual)
 
-Example: [Basic Usage](#basic-usage) | [Tasks with Parameters](#tasks-with-parameters) | [](#set-maximum-queue-size) | [Dynamic Thread Count Adjustment](#dynamic-thread-count-adjustment) | [Error Handling](#error-handling)
+Example: [Basic Usage](#basic-usage) | [Tasks with Parameters](#tasks-with-parameters) | [Set Maximum Queue Size](#set-maximum-queue-size) | [Dynamic Thread Count Adjustment](#dynamic-thread-count-adjustment) | [Error Handling](#error-handling)
 
 Advanced: [Task Priority](#task-priority) | [Assign Tasks to Specific Threads](#assign-tasks-to-specific-threads) | [Waiting for Task Completion](#waiting-for-task-completion)
 
@@ -40,7 +40,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(NekoThreadPool)
 
-# Add your target and link NekoLog
+# Add your target and link NekoThreadPool
 add_executable(your_target main.cpp)
 
 target_link_libraries(your_target PRIVATE NekoThreadPool)
@@ -140,7 +140,7 @@ int main() {
 
 ```cpp
 #include <neko/core/threadPool.hpp>
-#include "neko/schema/types.hpp"
+#include <neko/schema/types.hpp>
 #include <iostream>
 
 int main() {
@@ -149,15 +149,24 @@ int main() {
     // High priority task
     auto highPriority = pool.submitWithPriority(
         neko::Priority::High,
-        [](){}
+        [](){
+            std::cout << "High priority task executed\n";
+        }
     );
     
     // Low priority task
     auto lowPriority = pool.submitWithPriority(
         neko::Priority::Low,
-        [](){}
+        [](){
+            std::cout << "Low priority task executed\n";
+        }
     );
     
+    // Wait for completion
+    highPriority.wait();
+    lowPriority.wait();
+    
+    return 0;
 }
 ```
 
@@ -213,12 +222,12 @@ int main() {
         });
     }
     
-    // Wait for all tasks to complete
-    pool.waitForAllTasksCompletion();
+    // Wait for all global tasks to complete
+    pool.waitForGlobalTasks();
     std::cout << "All tasks completed\n";
     
     // Or use timeout waiting
-    bool completed = pool.waitForAllTasksCompletion(std::chrono::seconds(5));
+    bool completed = pool.waitForGlobalTasks(std::chrono::seconds(5));
     if (completed) {
         std::cout << "Tasks completed within 5 seconds\n";
     } else {
@@ -282,7 +291,7 @@ int main() {
                     std::this_thread::sleep_for(std::chrono::seconds(1));
                 });
                 std::cout << "Task " << i << " submitted\n";
-            } catch (const ex::TaskRejected& e) {
+            } catch (const neko::ex::TaskRejected& e) {
                 std::cout << "Task " << i << " rejected: " << e.what() << std::endl;
             }
         }

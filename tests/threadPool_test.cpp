@@ -6,8 +6,9 @@
  * @license MIT OR Apache-2.0
  */
 
-#include <gtest/gtest.h>
 #include <neko/core/threadPool.hpp>
+
+#include <gtest/gtest.h>
 
 #include <atomic>
 #include <chrono>

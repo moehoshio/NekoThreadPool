@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <functional>
 #include <memory>
+#include <optional>
 
 #include <atomic>
 #include <condition_variable>
