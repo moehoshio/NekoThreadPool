@@ -44,7 +44,7 @@ if(NEKO_THREAD_POOL_AUTO_FETCH_DEPS)
         FetchContent_MakeAvailable(googletest)
     endif()
 
-endif(NEKO_AUTO_FETCH_DEPS)
+endif(NEKO_THREAD_POOL_AUTO_FETCH_DEPS)
 
 
 # ================
