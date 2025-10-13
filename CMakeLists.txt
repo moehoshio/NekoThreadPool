@@ -5,9 +5,6 @@ project(NekoThreadPool VERSION 1.0 LANGUAGES CXX)
 # === Config ====
 # ================
 
-option(NEKO_BUILD_TESTS "Build tests" ON)
-option(NEKO_AUTO_FETCH_DEPS "Automatically fetch dependencies" ON)
-
 option(NEKO_THREAD_POOL_BUILD_TESTS "Neko Thread Pool Build tests" ON)
 option(NEKO_THREAD_POOL_AUTO_FETCH_DEPS "Neko Thread Pool Automatically fetch dependencies" ON)
 
@@ -17,14 +14,14 @@ message(STATUS "Start configuration Neko Thread Pool...")
 message(STATUS "NekoThreadPool configuration summary:")
 message(STATUS "  - CMake version: ${CMAKE_VERSION}")
 message(STATUS "")
-message(STATUS "  - Neko Thread Pool Auto fetch deps: ${NEKO_THREAD_POOL_AUTO_FETCH_DEPS} common: ${NEKO_AUTO_FETCH_DEPS}")
-message(STATUS "  - Neko Thread Pool Build tests: ${NEKO_THREAD_POOL_BUILD_TESTS} common: ${NEKO_BUILD_TESTS}")
+message(STATUS "  - Neko Thread Pool Auto fetch deps: ${NEKO_THREAD_POOL_AUTO_FETCH_DEPS}")
+message(STATUS "  - Neko Thread Pool Build tests: ${NEKO_THREAD_POOL_BUILD_TESTS}")
 message(STATUS "")
 message(STATUS "Dependency summary:")
 message(STATUS "  - No dependencies required at configuration time")
 message(STATUS "")
 
-if(NEKO_THREAD_POOL_AUTO_FETCH_DEPS OR (NEKO_AUTO_FETCH_DEPS AND NEKO_THREAD_POOL_AUTO_FETCH_DEPS))
+if(NEKO_THREAD_POOL_AUTO_FETCH_DEPS)
     include(FetchContent)
 
     FetchContent_Declare(
@@ -74,8 +71,8 @@ if(NEKO_THREAD_POOL_BUILD_TESTS)
     enable_testing()
     message(STATUS "NekoThreadPool tests enabled")
 
-    if (NOT NEKO_THREAD_POOL_AUTO_FETCH_DEPS AND NOT NEKO_AUTO_FETCH_DEPS)
-        message(FATAL_ERROR "GTest is required for building tests. Please enable NEKO_AUTO_FETCH_DEPS.")
+    if (NOT NEKO_THREAD_POOL_AUTO_FETCH_DEPS)
+        message(FATAL_ERROR "GTest is required for building tests. Please enable NEKO_THREAD_POOL_AUTO_FETCH_DEPS.")
     endif()
 
     add_executable(threadPool_test tests/threadPool_test.cpp)
