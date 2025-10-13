@@ -1,22 +1,30 @@
 cmake_minimum_required(VERSION 3.14)
 project(NekoThreadPool VERSION 1.0 LANGUAGES CXX)
 
-option(NEKO_AUTO_FETCH_DEPS "Automatically fetch dependencies" ON)
+# ================
+# === Config ====
+# ================
+
 option(NEKO_BUILD_TESTS "Build tests" ON)
+option(NEKO_AUTO_FETCH_DEPS "Automatically fetch dependencies" ON)
+
+option(NEKO_THREAD_POOL_BUILD_TESTS "Neko Thread Pool Build tests" ON)
+option(NEKO_THREAD_POOL_AUTO_FETCH_DEPS "Neko Thread Pool Automatically fetch dependencies" ON)
+
 
 # Print configuration summary
+message(STATUS "Start configuration Neko Thread Pool...")
 message(STATUS "NekoThreadPool configuration summary:")
 message(STATUS "  - CMake version: ${CMAKE_VERSION}")
 message(STATUS "")
-message(STATUS "  - Neko Auto fetch deps: ${NEKO_AUTO_FETCH_DEPS}")
-message(STATUS "  - Neko Build tests: ${NEKO_BUILD_TESTS}")
+message(STATUS "  - Neko Thread Pool Auto fetch deps: ${NEKO_THREAD_POOL_AUTO_FETCH_DEPS} common: ${NEKO_AUTO_FETCH_DEPS}")
+message(STATUS "  - Neko Thread Pool Build tests: ${NEKO_THREAD_POOL_BUILD_TESTS} common: ${NEKO_BUILD_TESTS}")
 message(STATUS "")
 message(STATUS "Dependency summary:")
-message(STATUS "  - GoogleTest support: ${GTest_FOUND}")
+message(STATUS "  - No dependencies required at configuration time")
 message(STATUS "")
 
-
-if(NEKO_AUTO_FETCH_DEPS)
+if(NEKO_THREAD_POOL_AUTO_FETCH_DEPS OR (NEKO_AUTO_FETCH_DEPS AND NEKO_THREAD_POOL_AUTO_FETCH_DEPS))
     include(FetchContent)
 
     FetchContent_Declare(
@@ -26,8 +34,8 @@ if(NEKO_AUTO_FETCH_DEPS)
     )
     FetchContent_MakeAvailable(NekoSchema)
 
-    if(NEKO_BUILD_TESTS)
-        message(STATUS "GTest not found. Fetching GoogleTest...")
+    if(NEKO_THREAD_POOL_BUILD_TESTS)
+        message(STATUS "Neko Thread Pool Fetching GoogleTest...")
 
         FetchContent_Declare(
             googletest
@@ -42,7 +50,12 @@ if(NEKO_AUTO_FETCH_DEPS)
 endif(NEKO_AUTO_FETCH_DEPS)
 
 
+# ================
+# = Main target =
+# ================
+
 add_library(NekoThreadPool INTERFACE)
+add_library(Neko::ThreadPool ALIAS NekoThreadPool)
 
 target_include_directories(NekoThreadPool INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -53,11 +66,15 @@ target_include_directories(NekoThreadPool INTERFACE
 target_link_libraries(NekoThreadPool INTERFACE NekoSchema)
 target_compile_features(NekoThreadPool INTERFACE cxx_std_20)
 
-if(NEKO_BUILD_TESTS)
+# ================
+# ==== Tests =====
+# ================
+
+if(NEKO_THREAD_POOL_BUILD_TESTS)
     enable_testing()
     message(STATUS "NekoThreadPool tests enabled")
 
-    if (NOT NEKO_AUTO_FETCH_DEPS)
+    if (NOT NEKO_THREAD_POOL_AUTO_FETCH_DEPS AND NOT NEKO_AUTO_FETCH_DEPS)
         message(FATAL_ERROR "GTest is required for building tests. Please enable NEKO_AUTO_FETCH_DEPS.")
     endif()
 
@@ -72,3 +89,5 @@ if(NEKO_BUILD_TESTS)
 else()
     message(STATUS "NekoThreadPool tests disabled (NEKO_BUILD_TESTS=OFF)")
 endif()
+
+message(STATUS "End Neko Thread Pool")
