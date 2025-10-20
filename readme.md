@@ -16,10 +16,11 @@ An easy-to-use and efficient C++ 20 thread pool that supports task priorities, s
 
 - C++20 or higher compatible compiler
 - CMake 3.14 or higher (if using CMake)
+- Git
 
 ## Quick Start
 
-Configuration: [CMake](#cmake) | [Manual](#manual)
+Configuration: [CMake](#cmake) | [Manual](#manual) | [Test](#test)
 
 Example: [Basic Usage](#basic-usage) | [Tasks with Parameters](#tasks-with-parameters) | [Set Maximum Queue Size](#set-maximum-queue-size) | [Dynamic Thread Count Adjustment](#dynamic-thread-count-adjustment) | [Error Handling](#error-handling)
 
@@ -304,12 +305,70 @@ int main() {
 }
 ```
 
+## Test
+
+You can run the tests to verify that everything is working correctly.
+
+If you haven't configured the build yet, please run:
+
+```shell
+# Global options
+cmake -D NEKO_BUILD_TESTS=ON -D NEKO_AUTO_FETCH_DEPS=ON -B ./build -S .
+# or specify to Neko Function only
+cmake -D NEKO_THREAD_POOL_BUILD_TESTS=ON -D NEKO_THREAD_POOL_AUTO_FETCH_DEPS=ON -B ./build -S .
+```
+
+Now, you can build the test files (you must build them manually at least once before running the tests!).
+
+```shell
+cmake --build ./build --config Debug
+```
+
+Then, you can run the tests with the following commands:
+
+```shell
+cd ./build && ctest --output-on-failure
+```
+
+If everything is set up correctly, you should see output similar to the following:
+
+```shell
+
+
+  Test project /path/to/NekoThreadPool/build
+      Start 1: NekoThreadPool_tests
+  1/1 Test #1: NekoThreadPool_tests ...............   Passed    0.21 sec
+
+  100% tests passed, 0 tests failed out of 1
+
+  Total Test time (real) =   0.21 sec
+```
+
+### Disable Tests
+
+If you want to disable building and running tests, you can set the following CMake option when configuring your project:
+
+```shell
+cmake -B ./build -DNEKO_THREAD_POOL_BUILD_TESTS=OFF -S .
+```
+
+or
+
+```shell
+cmake -B ./build -DNEKO_BUILD_TESTS=OFF -S .
+```
+
+(Note: This will disable tests for all Neko modules!)
+
+This will skip test targets during the build process.
+
 ## License
 
 [License](LICENSE) MIT OR Apache-2.0
 
 ## See More
 
+- [NekoNet](https://github.com/moehoshio/NekoNet): A modern , easy-to-use C++20 networking library via libcurl.
 - [NekoLog](https://github.com/moehoshio/NekoLog): An easy-to-use, modern, lightweight, and efficient C++20 logging library.
 - [NekoEvent](https://github.com/moehoshio/NekoEvent): A modern easy to use type-safe and high-performance event handling system for C++.
 - [NekoSchema](https://github.com/moehoshio/NekoSchema): A lightweight, header-only C++20 schema library.
