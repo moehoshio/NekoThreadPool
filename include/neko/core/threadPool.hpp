@@ -184,62 +184,56 @@ namespace neko::core::thread {
 
             for (;;) {
 
-                { // Check for personal tasks first
-                    if (self->hasPersonalTasks()) {
-                        self->tryRunAllPersonalTasks();
-                        continue;
-                    }
+                // Check for personal tasks first (outside any lock)
+                if (self->hasPersonalTasks()) {
+                    self->tryRunAllPersonalTasks();
+                    continue;
                 }
 
+                // Check if stopping before waiting
                 if (self->isStopping()) {
                     return;
                 }
 
                 Task gTask;
+                bool hasGlobalTask = false;
 
-                { // Check for global tasks
+                {
                     std::unique_lock<std::shared_mutex> lk(pool->globalTaskQueueMutex);
 
-                    if ((pool->stopping.load(std::memory_order_acquire) || self->isStopping()) && pool->globalTaskQueue.empty()) {
-                        return;
-                    }
-
-                    // Wait for work: global tasks OR stopping signal
-                    // Note: We don't check personal tasks here to avoid deadlock
-                    // Personal tasks are checked at the top of the loop after waking up
+                    // Wait for work: global tasks OR stopping signal OR personal tasks
                     pool->globalTaskQueueCondVar.wait(lk, [&] {
                         return pool->stopping.load(std::memory_order_acquire) || 
                                self->isStopping() || 
-                               !pool->globalTaskQueue.empty();
+                               !pool->globalTaskQueue.empty() ||
+                               self->hasPersonalTasks();
                     });
 
-                    // After waking up, release the lock and check personal tasks first
-                }
+                    // Check personal tasks first after waking up
+                    if (self->hasPersonalTasks()) {
+                        // Release lock and handle personal tasks
+                        lk.unlock();
+                        continue;
+                    }
 
-                // Check for personal tasks again after waking up
-                // This ensures we process personal tasks that were added while we were waiting
-                if (self->hasPersonalTasks()) {
-                    continue;
-                }
+                    // If stopping and no global tasks, exit
+                    if ((pool->stopping.load(std::memory_order_acquire) || self->isStopping()) && 
+                        pool->globalTaskQueue.empty()) {
+                        return;
+                    }
 
-                // If stopping, exit
-                if (self->isStopping() || pool->stopping.load(std::memory_order_acquire)) {
-                    return;
-                }
-
-                // Try to get a global task
-                {
-                    std::unique_lock<std::shared_mutex> lk(pool->globalTaskQueueMutex);
+                    // Try to get a global task
                     if (!pool->globalTaskQueue.empty()) {
                         const Task &top = pool->globalTaskQueue.top();
                         gTask = top; // Copy (Task is lightweight, function shares small object)
                         pool->globalTaskQueue.pop();
+                        hasGlobalTask = true;
                         pool->globalActiveTasks.fetch_add(1, std::memory_order_acq_rel);
                     }
                 }
 
                 // Execute the global task outside the lock
-                if (gTask.hasTask()) {
+                if (hasGlobalTask && gTask.hasTask()) {
                     try {
                         gTask.function();
                     } catch (...) {
