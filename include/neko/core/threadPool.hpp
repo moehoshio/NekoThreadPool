@@ -200,23 +200,39 @@ namespace neko::core::thread {
                 { // Check for global tasks
                     std::unique_lock<std::shared_mutex> lk(pool->globalTaskQueueMutex);
 
-                    if ((pool->stopping.load(std::memory_order_acquire) || self->isStopping()) && pool->globalTaskQueue.empty() && !self->hasPersonalTasks()) {
+                    if ((pool->stopping.load(std::memory_order_acquire) || self->isStopping()) && pool->globalTaskQueue.empty()) {
                         return;
                     }
 
+                    // Wait for work: global tasks OR stopping signal
+                    // Note: We don't check personal tasks here to avoid deadlock
+                    // Personal tasks are checked at the top of the loop after waking up
                     pool->globalTaskQueueCondVar.wait(lk, [&] {
-                        return pool->stopping.load(std::memory_order_acquire) || self->isStopping() || !pool->globalTaskQueue.empty() || self->hasPersonalTasks();
+                        return pool->stopping.load(std::memory_order_acquire) || 
+                               self->isStopping() || 
+                               !pool->globalTaskQueue.empty();
                     });
 
-                    // After waking up, check personal tasks again before processing global tasks
-                    // This ensures we don't miss personal tasks added during the wait
-                    if (self->hasPersonalTasks()) {
-                        continue;
-                    }
+                    // After waking up, release the lock and check personal tasks first
+                }
 
+                // Check for personal tasks again after waking up
+                // This ensures we process personal tasks that were added while we were waiting
+                if (self->hasPersonalTasks()) {
+                    continue;
+                }
+
+                // If stopping, exit
+                if (self->isStopping() || pool->stopping.load(std::memory_order_acquire)) {
+                    return;
+                }
+
+                // Try to get a global task
+                {
+                    std::unique_lock<std::shared_mutex> lk(pool->globalTaskQueueMutex);
                     if (!pool->globalTaskQueue.empty()) {
                         const Task &top = pool->globalTaskQueue.top();
-                        gTask = top; // 複製（Task 輕量,function 共享小型）
+                        gTask = top; // Copy (Task is lightweight, function shares small object)
                         pool->globalTaskQueue.pop();
                         pool->globalActiveTasks.fetch_add(1, std::memory_order_acq_rel);
                     }
