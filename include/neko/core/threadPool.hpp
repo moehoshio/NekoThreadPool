@@ -183,18 +183,6 @@ namespace neko::core::thread {
         static void workerLoop(ThreadPool *pool, WorkerInfo *self) {
 
             for (;;) {
-
-                // Check for personal tasks first (outside any lock)
-                if (self->hasPersonalTasks()) {
-                    self->tryRunAllPersonalTasks();
-                    continue;
-                }
-
-                // Check if stopping before waiting
-                if (self->isStopping()) {
-                    return;
-                }
-
                 Task gTask;
                 bool hasGlobalTask = false;
 
@@ -203,22 +191,29 @@ namespace neko::core::thread {
 
                     // Wait for work: global tasks OR stopping signal OR personal tasks
                     pool->globalTaskQueueCondVar.wait(lk, [&] {
+                        // Check personal tasks inside the wait predicate to ensure proper synchronization
+                        if (self->hasPersonalTasks()) {
+                            return true;
+                        }
                         return pool->stopping.load(std::memory_order_acquire) || 
                                self->isStopping() || 
-                               !pool->globalTaskQueue.empty() ||
-                               self->hasPersonalTasks();
+                               !pool->globalTaskQueue.empty();
                     });
 
                     // Check personal tasks first after waking up
                     if (self->hasPersonalTasks()) {
-                        // Release lock and handle personal tasks
                         lk.unlock();
+                        self->tryRunAllPersonalTasks();
                         continue;
                     }
 
+                    // Check if stopping before waiting
+                    if (self->isStopping()) {
+                        return;
+                    }
+
                     // If stopping and no global tasks, exit
-                    if ((pool->stopping.load(std::memory_order_acquire) || self->isStopping()) && 
-                        pool->globalTaskQueue.empty()) {
+                    if (pool->stopping.load(std::memory_order_acquire) && pool->globalTaskQueue.empty()) {
                         return;
                     }
 
@@ -382,11 +377,18 @@ namespace neko::core::thread {
 
             TaskId taskId = nextTaskId.fetch_add(1, std::memory_order_acq_rel);
             Task personalTask{[task]() { (*task)(); }, neko::Priority::Normal, taskId};
+            
+            // Post task and ensure visibility before notification
+            self->postTask(std::move(personalTask));
+            
+            // Acquire the lock before notifying to ensure the task is visible
+            // This prevents the race where a worker checks hasPersonalTasks() 
+            // after we post but before we notify
             {
-                self->postTask(std::move(personalTask));
+                std::unique_lock<std::shared_mutex> lk(globalTaskQueueMutex);
+                // The lock ensures memory synchronization
             }
-
-            // Try to wake the specific worker (only the targeted worker will be woken unless there are global tasks)
+            
             globalTaskQueueCondVar.notify_all();
             return task->get_future();
         }
