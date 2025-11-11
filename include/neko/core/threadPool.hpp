@@ -208,6 +208,12 @@ namespace neko::core::thread {
                         return pool->stopping.load(std::memory_order_acquire) || self->isStopping() || !pool->globalTaskQueue.empty() || self->hasPersonalTasks();
                     });
 
+                    // After waking up, check personal tasks again before processing global tasks
+                    // This ensures we don't miss personal tasks added during the wait
+                    if (self->hasPersonalTasks()) {
+                        continue;
+                    }
+
                     if (!pool->globalTaskQueue.empty()) {
                         const Task &top = pool->globalTaskQueue.top();
                         gTask = top; // 複製（Task 輕量,function 共享小型）

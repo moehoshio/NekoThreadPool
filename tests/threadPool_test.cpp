@@ -181,6 +181,27 @@ TEST(ThreadPoolTest, SubmitToInvalidWorker) {
     EXPECT_THROW({ pool.submitToWorker(9999, []() {}); }, neko::ex::OutOfRange);
 }
 
+TEST(ThreadPoolTest, SubmitToMultipleWorkersInParallel) {
+    ThreadPool pool(8);
+    auto workerIds = pool.getWorkerIds();
+    ASSERT_FALSE(workerIds.empty());
+
+    std::vector<std::future<std::thread::id>> futures;
+    
+    // Submit tasks to all workers in parallel
+    for (auto workerId : workerIds) {
+        futures.push_back(pool.submitToWorker(workerId, []() {
+            return std::this_thread::get_id();
+        }));
+    }
+    
+    // Verify all tasks complete successfully
+    for (auto& future : futures) {
+        auto threadId = future.get();
+        EXPECT_NE(threadId, std::thread::id());
+    }
+}
+
 // ==========================================
 // === Wait For Completion Tests ===
 // ==========================================
