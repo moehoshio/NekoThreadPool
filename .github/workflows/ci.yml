@@ -16,7 +16,7 @@ jobs:
         config:
           # Windows builds
           - {
-              name: "Windows MSVC 2022 Debug",
+              name: "Windows MSVC Debug",
               os: windows-latest,
               cc: "cl",
               cxx: "cl",
@@ -24,10 +24,26 @@ jobs:
               generators: "Visual Studio 17 2022"
             }
           - {
-              name: "Windows MSVC 2022 Release",
+              name: "Windows MSVC Release",
               os: windows-latest,
               cc: "cl",
               cxx: "cl",
+              build_type: "Release",
+              generators: "Visual Studio 17 2022"
+            }
+          - {
+              name: "Windows Clang Debug",
+              os: windows-latest,
+              cc: "clang",
+              cxx: "clang++",
+              build_type: "Debug",
+              generators: "Visual Studio 17 2022"
+            }
+          - {
+              name: "Windows Clang Release",
+              os: windows-latest,
+              cc: "clang",
+              cxx: "clang++",
               build_type: "Release",
               generators: "Visual Studio 17 2022"
             }
@@ -49,6 +65,22 @@ jobs:
               build_type: "Release",
               generators: "Unix Makefiles"
             }
+          - {
+              name: "Ubuntu Clang Debug",
+              os: ubuntu-latest,
+              cc: "clang",
+              cxx: "clang++",
+              build_type: "Debug",
+              generators: "Unix Makefiles"
+            }
+          - {
+              name: "Ubuntu Clang Release",
+              os: ubuntu-latest,
+              cc: "clang",
+              cxx: "clang++",
+              build_type: "Release",
+              generators: "Unix Makefiles"
+            }
 
           # macOS builds
           - {
@@ -64,6 +96,22 @@ jobs:
               os: macos-latest,
               cc: "clang",
               cxx: "clang++",
+              build_type: "Release",
+              generators: "Unix Makefiles"
+            }
+          - {
+              name: "macOS GCC Debug",
+              os: macos-latest,
+              cc: "gcc",
+              cxx: "g++",
+              build_type: "Debug",
+              generators: "Unix Makefiles"
+            }
+          - {
+              name: "macOS GCC Release",
+              os: macos-latest,
+              cc: "gcc",
+              cxx: "g++",
               build_type: "Release",
               generators: "Unix Makefiles"
             }
