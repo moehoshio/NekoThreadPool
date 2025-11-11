@@ -239,12 +239,15 @@ TEST(ThreadPoolTest, WaitForGlobalTasksTimeout) {
     ThreadPool pool(1);
 
     // Submit a long task
-    pool.submit([]() {
+    auto future = pool.submit([]() {
         std::this_thread::sleep_for(std::chrono::seconds(10));
     });
 
     bool completed = pool.waitForGlobalTasks(std::chrono::milliseconds(100));
     EXPECT_FALSE(completed);
+
+    // Stop the pool to cancel the long-running task before destruction
+    pool.stop(false);
 }
 
 // ==========================================
@@ -341,11 +344,18 @@ TEST(ThreadPoolTest, GetPendingTaskCount) {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
     // Add pending tasks
+    std::vector<std::future<void>> futures;
     for (int i = 0; i < 5; ++i) {
-        pool.submit([]() {});
+        futures.push_back(pool.submit([]() {}));
     }
 
     EXPECT_GT(pool.getPendingTaskCount(), 0u);
+
+    // Wait for all tasks to complete before destruction
+    blockingFuture.wait();
+    for (auto &f : futures) {
+        f.wait();
+    }
 }
 
 TEST(ThreadPoolTest, IsQueueFull) {
@@ -362,11 +372,18 @@ TEST(ThreadPoolTest, IsQueueFull) {
     EXPECT_FALSE(pool.isQueueFull());
 
     // Fill the queue
+    std::vector<std::future<void>> futures;
     for (int i = 0; i < 3; ++i) {
-        pool.submit([]() {});
+        futures.push_back(pool.submit([]() {}));
     }
 
     EXPECT_TRUE(pool.isQueueFull());
+
+    // Wait for all tasks to complete before destruction
+    blockingFuture.wait();
+    for (auto &f : futures) {
+        f.wait();
+    }
 }
 
 // ==========================================
@@ -409,6 +426,11 @@ TEST(ThreadPoolTest, ThreadUtilizationWithLoad) {
 
     // All threads should be busy
     EXPECT_GT(utilization, 0.0);
+
+    // Wait for all tasks to complete before destruction
+    for (auto &f : futures) {
+        f.wait();
+    }
 }
 
 // ==========================================
@@ -594,18 +616,23 @@ TEST(ThreadPoolTest, MixedGlobalAndPersonalTasks) {
     std::atomic<int> globalCounter{0};
     std::atomic<int> personalCounter{0};
 
+    std::vector<std::future<void>> personalFutures;
     for (int i = 0; i < 50; ++i) {
         pool.submit([&globalCounter]() {
             globalCounter++;
         });
 
-        pool.submitToWorker(workerIds[i % workerIds.size()], [&personalCounter]() {
+        personalFutures.push_back(pool.submitToWorker(workerIds[i % workerIds.size()], [&personalCounter]() {
             personalCounter++;
-        });
+        }));
     }
 
     pool.waitForGlobalTasks();
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    
+    // Wait for all personal tasks to complete
+    for (auto &f : personalFutures) {
+        f.wait();
+    }
 
     EXPECT_EQ(globalCounter.load(), 50);
     EXPECT_EQ(personalCounter.load(), 50);
