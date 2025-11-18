@@ -240,12 +240,7 @@ namespace neko::core::thread {
 
         void addWorker() {
             std::unique_lock<std::shared_mutex> lock(workerMutex);
-
-            auto id = nextWorkerId.fetch_add(1, std::memory_order_acq_rel);
-            auto w = std::make_unique<WorkerInfo>(id);
-            WorkerInfo *raw = w.get();
-            raw->addWorker(std::thread(&ThreadPool::workerLoop, this, raw));
-            workers.push_back(std::move(w));
+            addWorkerUnsafe();
         }
 
         void addWorkerUnsafe() {
