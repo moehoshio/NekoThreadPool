@@ -7,6 +7,7 @@
  */
 #pragma once
 
+#if !defined(NEKO_THREAD_POOL_ENABLE_MODULE)
 #include <neko/schema/exception.hpp>
 #include <neko/schema/types.hpp>
 
@@ -24,14 +25,16 @@
 
 #include <future>
 #include <queue>
+#include <string>
 #include <unordered_set>
 #include <vector>
+#endif
 
 /**
  * @brief Thread pool
- * @namespace neko::core::thread
+ * @namespace neko::thread
  */
-namespace neko::core::thread {
+namespace neko::thread {
 
     using TaskId = neko::uint64;
 
@@ -195,8 +198,8 @@ namespace neko::core::thread {
                         if (self->hasPersonalTasks()) {
                             return true;
                         }
-                        return pool->stopping.load(std::memory_order_acquire) || 
-                               self->isStopping() || 
+                        return pool->stopping.load(std::memory_order_acquire) ||
+                               self->isStopping() ||
                                !pool->globalTaskQueue.empty();
                     });
 
@@ -372,18 +375,18 @@ namespace neko::core::thread {
 
             TaskId taskId = nextTaskId.fetch_add(1, std::memory_order_acq_rel);
             Task personalTask{[task]() { (*task)(); }, neko::Priority::Normal, taskId};
-            
+
             // Post task and ensure visibility before notification
             self->postTask(std::move(personalTask));
-            
+
             // Acquire the lock before notifying to ensure the task is visible
-            // This prevents the race where a worker checks hasPersonalTasks() 
+            // This prevents the race where a worker checks hasPersonalTasks()
             // after we post but before we notify
             {
                 std::unique_lock<std::shared_mutex> lk(globalTaskQueueMutex);
                 // The lock ensures memory synchronization
             }
-            
+
             globalTaskQueueCondVar.notify_all();
             return task->get_future();
         }
@@ -477,7 +480,7 @@ namespace neko::core::thread {
 
             {
                 std::unique_lock<std::shared_mutex> lock(workerMutex);
-                
+
                 if (newThreadCount == workers.size()) {
                     return;
                 }
@@ -504,7 +507,6 @@ namespace neko::core::thread {
                     w->cleanup();
                 }
             }
-
         }
 
         /**
@@ -588,4 +590,4 @@ namespace neko::core::thread {
         }
     };
 
-} // namespace neko::core::thread
+} // namespace neko::thread

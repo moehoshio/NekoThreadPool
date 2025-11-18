@@ -6,7 +6,7 @@
  * @license MIT OR Apache-2.0
  */
 
-#include <neko/core/threadPool.hpp>
+#include <neko/thread/threadPool.hpp>
 
 #include <gtest/gtest.h>
 
@@ -16,7 +16,7 @@
 #include <thread>
 #include <vector>
 
-using namespace neko::core::thread;
+using namespace neko::thread;
 
 // ==========================================
 // === Basic Functionality Tests ===

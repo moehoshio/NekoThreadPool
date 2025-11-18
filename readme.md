@@ -1,6 +1,6 @@
 # NekoThreadPool
 
-An easy-to-use and efficient C++ 20 thread pool that supports task priorities, statistics collection, and task submission to specific threads.
+An easy-to-use and efficient C++ 20 thread pool that supports task priorities and task submission to specific threads.
 
 [![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
 ![Require](https://img.shields.io/badge/%20Require%20-%3E=%20C++%2020-orange.svg)
@@ -11,6 +11,7 @@ An easy-to-use and efficient C++ 20 thread pool that supports task priorities, s
 - **Task Priority** - Support for tasks with different priorities
 - **Personal Task Queue** - Support for assigning tasks to specific threads
 - **Dynamic Management** - Support for adjusting thread count and maximum queue size at runtime
+- **C++20 Module Support** - Optional support for C++20 modules for modern C++ projects
 
 ## Requirements
 
@@ -44,13 +45,13 @@ FetchContent_MakeAvailable(NekoThreadPool)
 # Add your target and link NekoThreadPool
 add_executable(your_target main.cpp)
 
-target_link_libraries(your_target PRIVATE NekoThreadPool)
+target_link_libraries(your_target PRIVATE Neko::ThreadPool)
 ```
 
 2. Include the header in your source code
 
 ```cpp
-#include <neko/core/threadPool.hpp>
+#include <neko/thread/threadPool.hpp>
 ```
 
 ### Manual
@@ -85,15 +86,60 @@ cp -r NekoThreadPool/include/ /path/to/your/include/
 #include <neko/core/threadPool.hpp>
 ```
 
+### C++20 Module Support
+
+NekoThreadPool supports C++20 modules
+
+#### Building with Module Support
+
+To enable C++20 module support, use the `NEKO_THREAD_POOL_ENABLE_MODULE` option:
+
+```cmake
+include(FetchContent)
+
+FetchContent_Declare(
+    NekoSchema
+    GIT_REPOSITORY https://github.com/moehoshio/NekoSchema.git
+    GIT_TAG        main
+)
+
+# Enable module support
+set(NEKO_THREAD_POOL_ENABLE_MODULE ON CACHE BOOL "" FORCE)
+
+FetchContent_MakeAvailable(NekoSchema)
+
+# Link against the module target
+add_executable(your_target main.cpp)
+target_link_libraries(your_target PRIVATE Neko::ThreadPool::Module)
+```
+
+#### Using the Module
+
+Instead of including headers, simply import the module:
+
+```cpp
+#include <iostream>
+import neko.thread;
+
+int main() {
+    neko::thread::ThreadPool pool;
+    auto future = pool.submit([]() {
+        return 42;
+    });
+    std::cout << "Result: " << future.get() << std::endl;
+    return 0;
+}
+```
+
 ### Basic Usage
 
 ```cpp
-#include <neko/core/threadPool.hpp>
+#include <neko/thread/threadPool.hpp>
 #include <iostream>
 
 int main() {
     // Create thread pool (uses hardware thread count by default)
-    neko::core::thread::ThreadPool pool(2);
+    neko::thread::ThreadPool pool(2);
     
     // Submit simple task
     auto future = pool.submit([]() {
@@ -110,7 +156,7 @@ int main() {
 ### Tasks with Parameters
 
 ```cpp
-#include <neko/core/threadPool.hpp>
+#include <neko/thread/threadPool.hpp>
 #include <iostream>
 
 int add(int a, int b) {
@@ -118,7 +164,7 @@ int add(int a, int b) {
 }
 
 int main() {
-    neko::core::thread::ThreadPool pool;
+    neko::thread::ThreadPool pool;
     
     // Submit function with parameters
     auto future1 = pool.submit(add, 10, 20);
@@ -140,12 +186,12 @@ int main() {
 ### Task Priority
 
 ```cpp
-#include <neko/core/threadPool.hpp>
+#include <neko/thread/threadPool.hpp>
 #include <neko/schema/types.hpp>
 #include <iostream>
 
 int main() {
-    neko::core::thread::ThreadPool pool;
+    neko::thread::ThreadPool pool;
     
     // High priority task
     auto highPriority = pool.submitWithPriority(
@@ -174,11 +220,11 @@ int main() {
 ### Assign Tasks to Specific Threads
 
 ```cpp
-#include <neko/core/threadPool.hpp>
+#include <neko/thread/threadPool.hpp>
 #include <iostream>
 
 int main() {
-    neko::core::thread::ThreadPool pool(4);
+    neko::thread::ThreadPool pool(4);
     
     // Get available thread IDs
     auto workerIds = pool.getWorkerIds();
@@ -208,12 +254,12 @@ Note: Assigning to a non-existent thread ID will throw a `neko::ex::OutOfRange` 
 ### Waiting for Task Completion
 
 ```cpp
-#include <neko/core/threadPool.hpp>
+#include <neko/thread/threadPool.hpp>
 #include <chrono>
 #include <iostream>
 
 int main() {
-    neko::core::thread::ThreadPool pool;
+    neko::thread::ThreadPool pool;
     
     // Submit multiple tasks
     for (int i = 0; i < 10; ++i) {
@@ -244,7 +290,7 @@ int main() {
 ### Set Maximum Queue Size
 
 ```cpp
-neko::core::thread::ThreadPool pool;
+neko::thread::ThreadPool pool;
 
 // Set maximum queue size to 1000
 pool.setMaxQueueSize(1000);
@@ -258,7 +304,7 @@ if (pool.isQueueFull()) {
 ### Dynamic Thread Count Adjustment
 
 ```cpp
-neko::core::thread::ThreadPool pool(2);
+neko::thread::ThreadPool pool(2);
 
 std::cout << "Initial thread count: " << pool.getThreadCount() << std::endl;
 
@@ -274,13 +320,13 @@ std::cout << "Final thread count: " << pool.getThreadCount() << std::endl;
 ## Error Handling
 
 ```cpp
-#include <neko/core/threadPool.hpp>
+#include <neko/thread/threadPool.hpp>
 #include <neko/schema/exception.hpp>
 #include <iostream>
 
 int main() {
     try {
-        neko::core::thread::ThreadPool pool;
+        neko::thread::ThreadPool pool;
         
         // Set small queue size
         pool.setMaxQueueSize(2);
@@ -312,13 +358,10 @@ You can run the tests to verify that everything is working correctly.
 If you haven't configured the build yet, please run:
 
 ```shell
-# Global options
-cmake -D NEKO_BUILD_TESTS=ON -D NEKO_AUTO_FETCH_DEPS=ON -B ./build -S .
-# or specify to Neko Function only
 cmake -D NEKO_THREAD_POOL_BUILD_TESTS=ON -D NEKO_THREAD_POOL_AUTO_FETCH_DEPS=ON -B ./build -S .
 ```
 
-Now, you can build the test files (you must build them manually at least once before running the tests!).
+Now, you can build the test files with the following command:
 
 ```shell
 cmake --build ./build --config Debug
@@ -327,7 +370,7 @@ cmake --build ./build --config Debug
 Then, you can run the tests with the following commands:
 
 ```shell
-cd ./build && ctest --output-on-failure
+cd ./build && ctest -C Debug --output-on-failure
 ```
 
 If everything is set up correctly, you should see output similar to the following:
@@ -351,14 +394,6 @@ If you want to disable building and running tests, you can set the following CMa
 ```shell
 cmake -B ./build -DNEKO_THREAD_POOL_BUILD_TESTS=OFF -S .
 ```
-
-or
-
-```shell
-cmake -B ./build -DNEKO_BUILD_TESTS=OFF -S .
-```
-
-(Note: This will disable tests for all Neko modules!)
 
 This will skip test targets during the build process.
 
