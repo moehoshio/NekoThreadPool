@@ -1,5 +1,5 @@
 [requires]
-neko-threadpool/1.0.0
+neko-threadpool/[*]
 
 [generators]
 CMakeDeps
