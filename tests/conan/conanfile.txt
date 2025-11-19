@@ -1,0 +1,9 @@
+[requires]
+neko-threadpool/*
+
+[generators]
+CMakeDeps
+CMakeToolchain
+
+[layout]
+cmake_layout
