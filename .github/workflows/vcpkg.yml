@@ -68,25 +68,29 @@ jobs:
     - name: Update portfile to use local source (Unix)
       if: runner.os != 'Windows'
       run: |
-        # Replace the vcpkg_from_github block with local source path
-        portfile="${{ github.workspace }}/vcpkg/ports/neko-threadpool/portfile.cmake"
-        source_path="${{ github.workspace }}"
+        python3 << 'PYSCRIPT'
+        import re
         
-        # Read the file and process it with awk
-        awk -v src="$source_path" '
-          /^vcpkg_from_github\(/ {
-            print "set(SOURCE_PATH \"" src "\")"
-            skip = 1
-            next
-          }
-          skip && /^\)/ {
-            skip = 0
-            next
-          }
-          !skip { print }
-        ' "$portfile" > "$portfile.tmp"
+        portfile_path = "${{ github.workspace }}/vcpkg/ports/neko-threadpool/portfile.cmake"
+        source_path = "${{ github.workspace }}"
         
-        mv "$portfile.tmp" "$portfile"
+        with open(portfile_path, 'r') as f:
+            content = f.read()
+        
+        # Replace vcpkg_from_github block with set(SOURCE_PATH)
+        pattern = r'vcpkg_from_github\([^)]*\)'
+        replacement = f'set(SOURCE_PATH "{source_path}")'
+        new_content = re.sub(pattern, replacement, content, flags=re.DOTALL)
+        
+        with open(portfile_path, 'w') as f:
+            f.write(new_content)
+        
+        print("Modified portfile content:")
+        with open(portfile_path, 'r') as f:
+            lines = f.readlines()
+            for i, line in enumerate(lines[:15], 1):
+                print(f"{i}: {line}", end='')
+        PYSCRIPT
 
     - name: Update portfile to use local source (Windows)
       if: runner.os == 'Windows'
@@ -141,10 +145,10 @@ jobs:
         INSTALL_ROOT="${{ github.workspace }}/vcpkg/installed/${{ matrix.triplet }}"
         
         # Check headers
-        if [ -d "$INSTALL_ROOT/include/neko/threadpool" ]; then
+        if [ -d "$INSTALL_ROOT/include/neko/thread" ]; then
           echo "✓ Headers directory exists"
           echo "  Headers found:"
-          find "$INSTALL_ROOT/include/neko/threadpool" -type f
+          find "$INSTALL_ROOT/include/neko/thread" -type f
         else
           echo "✗ Headers directory not found"
           exit 1

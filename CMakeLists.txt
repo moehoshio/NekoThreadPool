@@ -72,9 +72,9 @@ target_include_directories(NekoThreadPool INTERFACE
     $<INSTALL_INTERFACE:include>
 )
 
-# Dependencies
-target_link_libraries(NekoThreadPool INTERFACE NekoSchema)
 target_compile_features(NekoThreadPool INTERFACE cxx_std_20)
+
+target_link_libraries(NekoThreadPool INTERFACE NekoSchema)
 
 # ================
 # = C++20 Module =
@@ -137,7 +137,7 @@ if(NEKO_THREAD_POOL_BUILD_TESTS)
 
     add_executable(threadPool_test tests/threadPool_test.cpp)
     target_include_directories(threadPool_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    target_link_libraries(threadPool_test PRIVATE NekoThreadPool GTest::gtest GTest::gtest_main)
+    target_link_libraries(threadPool_test PRIVATE NekoThreadPool NekoSchema GTest::gtest GTest::gtest_main)
     target_compile_features(threadPool_test PRIVATE cxx_std_20)
 
     include(GoogleTest)

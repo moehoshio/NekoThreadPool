@@ -1,12 +1,16 @@
 @PACKAGE_INIT@
 
+# Find required dependencies
+# NekoSchema is a header-only dependency, just need to find it for includes
+include(CMakeFindDependencyMacro)
+find_dependency(NekoSchema REQUIRED)
+
 # Include the targets file
 include("${CMAKE_CURRENT_LIST_DIR}/NekoThreadPoolTargets.cmake")
 
-# Create the Neko::Schema alias if it doesn't exist
-# (it exists in build tree but not after installation)
+# Recreate the Neko::ThreadPool alias for consumers
 if(TARGET NekoThreadPool AND NOT TARGET Neko::ThreadPool)
-    add_library(Neko::ThreadPool ALIAS NekoThreadPool)
+	add_library(Neko::ThreadPool ALIAS NekoThreadPool)
 endif()
 
 check_required_components(NekoThreadPool)

@@ -1,5 +1,6 @@
 ﻿{
-    "version": "1.0.0",
+    "version": "1.0.1",
+    "port-version": 1,
     "name": "neko-threadpool",
     "description": "An easy-to-use and efficient C++ 20 thread pool that supports task priorities and task submission to specific threads.",
     "homepage": "https://github.com/moehoshio/NekoThreadPool",
@@ -12,6 +13,7 @@
         {
             "name": "vcpkg-cmake-config",
             "host": true
-        }
+        },
+        "neko-schema"
     ]
 }

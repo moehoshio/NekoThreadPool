@@ -28,7 +28,7 @@ int main() {
         }
 
         // Wait for tasks to complete
-        pool.waitForTasks();
+        pool.waitForGlobalTasks();
         
         if (counter == 10) {
             std::cout << "✓ All tasks completed successfully (counter = " << counter << ")" << std::endl;
@@ -38,7 +38,7 @@ int main() {
         }
 
         // Test task with return value
-        auto future = pool.submitTask<int>([]() {
+        auto future = pool.submit([]() {
             return 42;
         });
 

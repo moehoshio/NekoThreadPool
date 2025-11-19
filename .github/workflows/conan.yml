@@ -82,12 +82,12 @@ jobs:
     - name: Create Conan package from local source (Unix)
       if: runner.os != 'Windows'
       run: |
-        conan create . --build=missing
+        conan create . --version=1.0.0 --build=missing
 
     - name: Create Conan package from local source (Windows)
       if: runner.os == 'Windows'
       run: |
-        conan create . --build=missing
+        conan create . --version=1.0.0 --build=missing
 
     - name: Verify Conan package installation
       run: |
@@ -95,7 +95,7 @@ jobs:
 
     - name: Install dependencies with Conan
       working-directory: tests/conan
-      run: conan install . --build=missing
+      run: conan install . --build=missing --update
 
     - name: Configure test project (Unix)
       if: runner.os != 'Windows'

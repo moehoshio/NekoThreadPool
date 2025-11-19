@@ -26,6 +26,9 @@ class NekoThreadPoolConan(ConanFile):
     no_copy_source = True
     
     exports_sources = "CMakeLists.txt", "include/*", "tests/*", "LICENSE", "README.md"
+
+    # def requirements(self):
+        # self.test_requires("neko-schema/1.1.0")
     
     def layout(self):
         cmake_layout(self)
@@ -34,7 +37,9 @@ class NekoThreadPoolConan(ConanFile):
         tc = CMakeToolchain(self)
         tc.variables["NEKO_THREAD_POOL_BUILD_TESTS"] = False
         tc.variables["NEKO_THREAD_POOL_ENABLE_MODULE"] = self.options.enable_module
-        tc.variables["NEKO_THREAD_POOL_AUTO_FETCH_DEPS"] = False
+        # Automatically fetch NekoSchema until it is available in Conan
+        tc.variables["NEKO_THREAD_POOL_AUTO_FETCH_DEPS"] = True
+        tc.variables["NEKO_SCHEMA_BUILD_TESTS"] = False
         tc.generate()
         
         deps = CMakeDeps(self)
