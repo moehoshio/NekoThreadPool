@@ -32,9 +32,9 @@ class NekoThreadPoolConan(ConanFile):
     
     def generate(self):
         tc = CMakeToolchain(self)
-        tc.variables["NEKO_THREADPOOL_BUILD_TESTS"] = False
-        tc.variables["NEKO_THREADPOOL_ENABLE_MODULE"] = self.options.enable_module
-        tc.variables["NEKO_THREADPOOL_AUTO_FETCH_DEPS"] = False
+        tc.variables["NEKO_THREAD_POOL_BUILD_TESTS"] = False
+        tc.variables["NEKO_THREAD_POOL_ENABLE_MODULE"] = self.options.enable_module
+        tc.variables["NEKO_THREAD_POOL_AUTO_FETCH_DEPS"] = False
         tc.generate()
         
         deps = CMakeDeps(self)
