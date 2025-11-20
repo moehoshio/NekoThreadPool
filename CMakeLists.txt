@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(NekoThreadPool VERSION 1.0.0 LANGUAGES CXX)
+project(NekoThreadPool VERSION 1.0.2 LANGUAGES CXX)
 
 # ================
 # === Config ====
@@ -38,6 +38,7 @@ if(NEKO_THREAD_POOL_AUTO_FETCH_DEPS)
             GIT_REPOSITORY https://github.com/moehoshio/NekoSchema.git
             GIT_TAG        main
         )
+        set(NEKO_SCHEMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
         if (NEKO_THREAD_POOL_ENABLE_MODULE)
             set(NEKO_SCHEMA_ENABLE_MODULE ON CACHE BOOL "" FORCE)
         endif()
@@ -52,7 +53,6 @@ if(NEKO_THREAD_POOL_AUTO_FETCH_DEPS)
             GIT_REPOSITORY https://github.com/google/googletest.git
             GIT_TAG        v1.17.0
         )
-        # For Windows: Prevent overriding the parent project's compiler/linker settings
         set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
         FetchContent_MakeAvailable(googletest)
     endif()
@@ -130,8 +130,8 @@ if(NEKO_THREAD_POOL_BUILD_TESTS)
     enable_testing()
     message(STATUS "NekoThreadPool tests enabled (NEKO_THREAD_POOL_BUILD_TESTS=ON)")
 
-    if (NOT GTEST_FOUND AND NOT NEKO_THREAD_POOL_AUTO_FETCH_DEPS)
-        message(STATUS "GTest is required for building tests but was not found.")
+    if (NOT Gtest_FOUND AND NOT NEKO_THREAD_POOL_AUTO_FETCH_DEPS)
+        message(WARNING "GTest is required for building tests but was not found.")
         message(FATAL_ERROR "Please enable -DNEKO_THREAD_POOL_AUTO_FETCH_DEPS=ON or install GTest and make it discoverable by CMake. e.g -DCMAKE_PREFIX_PATH=</path/to/googletest>")
     endif()
 

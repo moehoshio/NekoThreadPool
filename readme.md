@@ -5,6 +5,7 @@ An easy-to-use and efficient C++ 20 thread pool that supports task priorities an
 [![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
 ![Require](https://img.shields.io/badge/%20Require%20-%3E=%20C++%2020-orange.svg)
 [![CMake](https://img.shields.io/badge/CMake-3.14+-green.svg)](https://cmake.org/)
+![Module Support](https://img.shields.io/badge/Modules-C%2B%2B20-blueviolet.svg)
 
 ## Features
 
@@ -21,7 +22,7 @@ An easy-to-use and efficient C++ 20 thread pool that supports task priorities an
 
 ## Quick Start
 
-Configuration: [CMake](#cmake) | [Manual](#manual) | [Test](#test)
+Configuration: [CMake](#cmake) | [vcpkg](#vcpkg) | [Conan](#conan) |[Manual](#manual) | [Test](#test)
 
 Example: [Basic Usage](#basic-usage) | [Tasks with Parameters](#tasks-with-parameters) | [Set Maximum Queue Size](#set-maximum-queue-size) | [Dynamic Thread Count Adjustment](#dynamic-thread-count-adjustment) | [Error Handling](#error-handling)
 
@@ -54,6 +55,142 @@ target_link_libraries(your_target PRIVATE Neko::ThreadPool)
 #include <neko/thread/threadPool.hpp>
 ```
 
+#### CMake with Module Support
+
+To enable C++20 module support, use the `NEKO_THREAD_POOL_ENABLE_MODULE` option:
+
+```cmake
+FetchContent_Declare(
+    ...
+)
+
+# Set Options Before Building
+set(NEKO_THREAD_POOL_ENABLE_MODULE ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(NekoThreadPool)
+
+...
+
+target_link_libraries(your_target PRIVATE Neko::ThreadPool::Module)
+```
+
+Import the module in your source code:
+
+```cpp
+import neko.thread;
+```
+
+### vcpkg
+
+Install NekoThreadPool using vcpkg:
+
+```shell
+vcpkg install neko-threadpool
+```
+
+Or add it to your `vcpkg.json`:
+
+```json
+{
+  "dependencies": ["neko-threadpool"]
+}
+```
+
+Then in your CMakeLists.txt:
+
+```cmake
+find_package(NekoThreadPool CONFIG REQUIRED)
+target_link_libraries(your_target PRIVATE Neko::ThreadPool)
+```
+
+When configuring your project, specify the vcpkg toolchain file:
+
+```shell
+cmake -B build -DCMAKE_PREFIX_PATH=/path/to/vcpkg/installed/x64-windows
+cmake --build build --config Debug
+```
+
+Note: Installing via vcpkg does not support modules.
+
+### Conan
+
+Add NekoThreadPool to your `conanfile.txt`:
+
+```ini
+[requires]
+neko-threadpool/*
+
+[generators]
+CMakeDeps
+CMakeToolchain
+```
+
+Or use it in your `conanfile.py`:
+
+```python
+from conan import ConanFile
+
+class YourProject(ConanFile):
+    requires = "neko-threadpool/*"
+    generators = "CMakeDeps", "CMakeToolchain"
+```
+
+Then install and use:
+
+```shell
+conan install . --build=missing
+cmake -B build -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake
+cmake --build build
+```
+
+In your CMakeLists.txt:
+
+```cmake
+find_package(NekoThreadPool CONFIG REQUIRED)
+target_link_libraries(your_target PRIVATE Neko::ThreadPool)
+```
+
+#### Conan with C++20 Module Support
+
+To enable C++20 module support with Conan, use the `enable_module` option:
+
+```shell
+conan install . --build=missing -o neko-threadpool/*:enable_module=True
+```
+
+Or specify it in your `conanfile.txt`:
+
+```ini
+[requires]
+neko-threadpool/*
+
+[options]
+neko-threadpool/*:enable_module=True
+
+[generators]
+CMakeDeps
+CMakeToolchain
+```
+
+Or in your `conanfile.py`:
+
+```python
+from conan import ConanFile
+
+class YourProject(ConanFile):
+    requires = "neko-threadpool/*"
+    generators = "CMakeDeps", "CMakeToolchain"
+    
+    def configure(self):
+        self.options["neko-threadpool"].enable_module = True
+```
+
+Then link against the module target in your CMakeLists.txt:
+
+```cmake
+find_package(NekoThreadPool CONFIG REQUIRED)
+target_link_libraries(your_target PRIVATE Neko::ThreadPool::Module)
+```
+
 ### Manual
 
 When installing manually, you need to manually fetch the dependency [`NekoSchema`](https://github.com/moehoshio/NekoSchema).
@@ -84,51 +221,6 @@ cp -r NekoThreadPool/include/ /path/to/your/include/
 
 ```cpp
 #include <neko/core/threadPool.hpp>
-```
-
-### C++20 Module Support
-
-NekoThreadPool supports C++20 modules
-
-#### Building with Module Support
-
-To enable C++20 module support, use the `NEKO_THREAD_POOL_ENABLE_MODULE` option:
-
-```cmake
-include(FetchContent)
-
-FetchContent_Declare(
-    NekoSchema
-    GIT_REPOSITORY https://github.com/moehoshio/NekoSchema.git
-    GIT_TAG        main
-)
-
-# Enable module support
-set(NEKO_THREAD_POOL_ENABLE_MODULE ON CACHE BOOL "" FORCE)
-
-FetchContent_MakeAvailable(NekoSchema)
-
-# Link against the module target
-add_executable(your_target main.cpp)
-target_link_libraries(your_target PRIVATE Neko::ThreadPool::Module)
-```
-
-#### Using the Module
-
-Instead of including headers, simply import the module:
-
-```cpp
-#include <iostream>
-import neko.thread;
-
-int main() {
-    neko::thread::ThreadPool pool;
-    auto future = pool.submit([]() {
-        return 42;
-    });
-    std::cout << "Result: " << future.get() << std::endl;
-    return 0;
-}
 ```
 
 ### Basic Usage

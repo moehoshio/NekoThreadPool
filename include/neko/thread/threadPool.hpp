@@ -7,7 +7,7 @@
  */
 #pragma once
 
-#if !defined(NEKO_THREAD_POOL_ENABLE_MODULE)
+#if !defined(NEKO_THREAD_POOL_ENABLE_MODULE) || (NEKO_THREAD_POOL_ENABLE_MODULE == false)
 #include <neko/schema/exception.hpp>
 #include <neko/schema/types.hpp>
 

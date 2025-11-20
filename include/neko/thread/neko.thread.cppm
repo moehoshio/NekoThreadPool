@@ -7,7 +7,9 @@
 
 module;
 
-#if !defined(__cpp_lib_modules) || (__cpp_lib_modules < 202207L)
+#if defined(__cpp_lib_modules) && (__cpp_lib_modules >= 202207L)
+import std;
+#else
 // Global module fragment - include headers that should not be exported
 #include <algorithm>
 #include <functional>
@@ -28,10 +30,11 @@ module;
 #include <string>
 #endif
 
-export module neko.thread;
-
 import neko.schema;
 
+export module neko.thread;
+
+// Control header files to not import dependencies (dependencies are declared and imported by the cppm)
 #define NEKO_THREAD_POOL_ENABLE_MODULE true
 
 export {

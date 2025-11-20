@@ -24,14 +24,14 @@ using namespace neko::thread;
 // === Module Import Verification Tests ===
 // ==========================================
 
-TEST(ModuleTest, VerifyModuleImport) {
+TEST(NekoThreadPoolModuleTest, VerifyModuleImport) {
     // Verify that we can create a ThreadPool using module import
     EXPECT_NO_THROW({
         ThreadPool pool(2);
     });
 }
 
-TEST(ModuleTest, VerifyPriorityEnum) {
+TEST(NekoThreadPoolModuleTest, VerifyPriorityEnum) {
     // Verify that Priority enum is accessible from module
     EXPECT_NO_THROW({
         neko::Priority high = neko::Priority::High;
@@ -48,14 +48,14 @@ TEST(ModuleTest, VerifyPriorityEnum) {
 // === Basic Module Functionality Tests ===
 // ==========================================
 
-TEST(ModuleTest, BasicConstruction) {
+TEST(NekoThreadPoolModuleTest, BasicConstruction) {
     EXPECT_NO_THROW({
         ThreadPool pool(4);
         EXPECT_EQ(pool.getThreadCount(), 4u);
     });
 }
 
-TEST(ModuleTest, SubmitSimpleTask) {
+TEST(NekoThreadPoolModuleTest, SubmitSimpleTask) {
     ThreadPool pool(2);
     std::atomic<bool> taskExecuted{false};
 
@@ -67,7 +67,7 @@ TEST(ModuleTest, SubmitSimpleTask) {
     EXPECT_TRUE(taskExecuted.load());
 }
 
-TEST(ModuleTest, SubmitTaskWithReturnValue) {
+TEST(NekoThreadPoolModuleTest, SubmitTaskWithReturnValue) {
     ThreadPool pool(2);
 
     auto future = pool.submit([]() {
@@ -77,7 +77,7 @@ TEST(ModuleTest, SubmitTaskWithReturnValue) {
     EXPECT_EQ(future.get(), 42);
 }
 
-TEST(ModuleTest, SubmitTaskWithParameters) {
+TEST(NekoThreadPoolModuleTest, SubmitTaskWithParameters) {
     ThreadPool pool(2);
 
     auto add = [](int a, int b) {
@@ -92,7 +92,7 @@ TEST(ModuleTest, SubmitTaskWithParameters) {
 // === Module Priority Tests ===
 // ==========================================
 
-TEST(ModuleTest, SubmitWithPriority) {
+TEST(NekoThreadPoolModuleTest, SubmitWithPriority) {
     ThreadPool pool(2);
     std::atomic<int> counter{0};
 
@@ -122,7 +122,7 @@ TEST(ModuleTest, SubmitWithPriority) {
 // === Module Personal Queue Tests ===
 // ==========================================
 
-TEST(ModuleTest, SubmitToWorker) {
+TEST(NekoThreadPoolModuleTest, SubmitToWorker) {
     ThreadPool pool(4);
     auto workerIds = pool.getWorkerIds();
     ASSERT_FALSE(workerIds.empty());
@@ -138,7 +138,7 @@ TEST(ModuleTest, SubmitToWorker) {
     EXPECT_EQ(counter.load(), 1);
 }
 
-TEST(ModuleTest, SubmitToInvalidWorker) {
+TEST(NekoThreadPoolModuleTest, SubmitToInvalidWorker) {
     ThreadPool pool(2);
     
     EXPECT_THROW({
@@ -150,7 +150,7 @@ TEST(ModuleTest, SubmitToInvalidWorker) {
 // === Module Statistics Tests ===
 // ==========================================
 
-TEST(ModuleTest, GetWorkerIds) {
+TEST(NekoThreadPoolModuleTest, GetWorkerIds) {
     ThreadPool pool(4);
     auto workerIds = pool.getWorkerIds();
     
@@ -161,12 +161,12 @@ TEST(ModuleTest, GetWorkerIds) {
     EXPECT_EQ(uniqueIds.size(), workerIds.size());
 }
 
-TEST(ModuleTest, GetThreadCount) {
+TEST(NekoThreadPoolModuleTest, GetThreadCount) {
     ThreadPool pool(6);
     EXPECT_EQ(pool.getThreadCount(), 6u);
 }
 
-TEST(ModuleTest, GetThreadUtilization) {
+TEST(NekoThreadPoolModuleTest, GetThreadUtilization) {
     ThreadPool pool(4);
     auto utilization = pool.getThreadUtilization();
     
@@ -174,7 +174,7 @@ TEST(ModuleTest, GetThreadUtilization) {
     EXPECT_LE(utilization, 1.0);
 }
 
-TEST(ModuleTest, GetQueueUtilization) {
+TEST(NekoThreadPoolModuleTest, GetQueueUtilization) {
     ThreadPool pool(2);
     auto utilization = pool.getQueueUtilization();
     
@@ -182,7 +182,7 @@ TEST(ModuleTest, GetQueueUtilization) {
     EXPECT_LE(utilization, 1.0);
 }
 
-TEST(ModuleTest, GetPendingTaskCount) {
+TEST(NekoThreadPoolModuleTest, GetPendingTaskCount) {
     ThreadPool pool(1);
     
     std::mutex mtx;
@@ -224,18 +224,18 @@ TEST(ModuleTest, GetPendingTaskCount) {
 // === Module Queue Management Tests ===
 // ==========================================
 
-TEST(ModuleTest, GetMaxQueueSize) {
+TEST(NekoThreadPoolModuleTest, GetMaxQueueSize) {
     ThreadPool pool(2);
     EXPECT_GT(pool.getMaxQueueSize(), 0u);
 }
 
-TEST(ModuleTest, SetMaxQueueSize) {
+TEST(NekoThreadPoolModuleTest, SetMaxQueueSize) {
     ThreadPool pool(2);
     pool.setMaxQueueSize(100);
     EXPECT_EQ(pool.getMaxQueueSize(), 100u);
 }
 
-TEST(ModuleTest, IsQueueFull) {
+TEST(NekoThreadPoolModuleTest, IsQueueFull) {
     ThreadPool pool(1);
     pool.setMaxQueueSize(3);
 
@@ -280,7 +280,7 @@ TEST(ModuleTest, IsQueueFull) {
 // === Module Thread Management Tests ===
 // ==========================================
 
-TEST(ModuleTest, SetThreadCountIncrease) {
+TEST(NekoThreadPoolModuleTest, SetThreadCountIncrease) {
     ThreadPool pool(2);
     EXPECT_EQ(pool.getThreadCount(), 2u);
 
@@ -304,7 +304,7 @@ TEST(ModuleTest, SetThreadCountIncrease) {
     EXPECT_EQ(counter.load(), 8);
 }
 
-TEST(ModuleTest, SetThreadCountDecrease) {
+TEST(NekoThreadPoolModuleTest, SetThreadCountDecrease) {
     ThreadPool pool(4);
     EXPECT_EQ(pool.getThreadCount(), 4u);
 
@@ -328,7 +328,7 @@ TEST(ModuleTest, SetThreadCountDecrease) {
     EXPECT_EQ(counter.load(), 4);
 }
 
-TEST(ModuleTest, SetThreadCountZero) {
+TEST(NekoThreadPoolModuleTest, SetThreadCountZero) {
     ThreadPool pool(4);
     pool.setThreadCount(0);
     EXPECT_GE(pool.getThreadCount(), 1u);
@@ -338,7 +338,7 @@ TEST(ModuleTest, SetThreadCountZero) {
 // === Module Wait Tests ===
 // ==========================================
 
-TEST(ModuleTest, WaitForGlobalTasks) {
+TEST(NekoThreadPoolModuleTest, WaitForGlobalTasks) {
     ThreadPool pool(4);
     std::atomic<int> counter{0};
 
@@ -353,7 +353,7 @@ TEST(ModuleTest, WaitForGlobalTasks) {
     EXPECT_EQ(counter.load(), 20);
 }
 
-TEST(ModuleTest, WaitForGlobalTasksWithTimeout) {
+TEST(NekoThreadPoolModuleTest, WaitForGlobalTasksWithTimeout) {
     ThreadPool pool(2);
 
     // Submit quick tasks
@@ -367,7 +367,7 @@ TEST(ModuleTest, WaitForGlobalTasksWithTimeout) {
     EXPECT_TRUE(completed);
 }
 
-TEST(ModuleTest, WaitForGlobalTasksTimeout) {
+TEST(NekoThreadPoolModuleTest, WaitForGlobalTasksTimeout) {
     ThreadPool pool(1);
     std::atomic<bool> shouldContinue{true};
 
@@ -390,7 +390,7 @@ TEST(ModuleTest, WaitForGlobalTasksTimeout) {
 // === Module Stop Tests ===
 // ==========================================
 
-TEST(ModuleTest, StopWithWait) {
+TEST(NekoThreadPoolModuleTest, StopWithWait) {
     ThreadPool pool(2);
     std::atomic<int> counter{0};
 
@@ -405,7 +405,7 @@ TEST(ModuleTest, StopWithWait) {
     EXPECT_EQ(counter.load(), 10);
 }
 
-TEST(ModuleTest, StopWithoutWait) {
+TEST(NekoThreadPoolModuleTest, StopWithoutWait) {
     ThreadPool pool(2);
     std::atomic<int> counter{0};
 
@@ -420,7 +420,7 @@ TEST(ModuleTest, StopWithoutWait) {
     EXPECT_LE(counter.load(), 100);
 }
 
-TEST(ModuleTest, SubmitAfterStop) {
+TEST(NekoThreadPoolModuleTest, SubmitAfterStop) {
     ThreadPool pool(2);
     pool.stop();
 
@@ -433,7 +433,7 @@ TEST(ModuleTest, SubmitAfterStop) {
 // === Module Exception Handling Tests ===
 // ==========================================
 
-TEST(ModuleTest, TaskWithException) {
+TEST(NekoThreadPoolModuleTest, TaskWithException) {
     ThreadPool pool(2);
 
     auto future = pool.submit([]() {
@@ -445,7 +445,7 @@ TEST(ModuleTest, TaskWithException) {
     }, std::runtime_error);
 }
 
-TEST(ModuleTest, MultipleTasksWithExceptions) {
+TEST(NekoThreadPoolModuleTest, MultipleTasksWithExceptions) {
     ThreadPool pool(4);
     std::vector<std::future<void>> futures;
 
@@ -473,7 +473,7 @@ TEST(ModuleTest, MultipleTasksWithExceptions) {
 // === Module Stress Tests ===
 // ==========================================
 
-TEST(ModuleTest, HighLoadSubmission) {
+TEST(NekoThreadPoolModuleTest, HighLoadSubmission) {
     ThreadPool pool(8);
     std::atomic<int> counter{0};
     std::vector<std::future<void>> futures;
@@ -492,7 +492,7 @@ TEST(ModuleTest, HighLoadSubmission) {
     EXPECT_EQ(counter.load(), taskCount);
 }
 
-TEST(ModuleTest, ConcurrentSubmission) {
+TEST(NekoThreadPoolModuleTest, ConcurrentSubmission) {
     ThreadPool pool(4);
     std::atomic<int> counter{0};
     std::vector<std::thread> submitters;
@@ -522,7 +522,7 @@ TEST(ModuleTest, ConcurrentSubmission) {
 // === Module Complex Scenario Tests ===
 // ==========================================
 
-TEST(ModuleTest, MixedPriorityTasks) {
+TEST(NekoThreadPoolModuleTest, MixedPriorityTasks) {
     ThreadPool pool(4);
     std::atomic<int> highCounter{0};
     std::atomic<int> normalCounter{0};
@@ -548,7 +548,7 @@ TEST(ModuleTest, MixedPriorityTasks) {
     EXPECT_EQ(lowCounter.load(), tasksPerPriority);
 }
 
-TEST(ModuleTest, MixedGlobalAndPersonalTasks) {
+TEST(NekoThreadPoolModuleTest, MixedGlobalAndPersonalTasks) {
     ThreadPool pool(4);
     auto workerIds = pool.getWorkerIds();
     std::atomic<int> globalCounter{0};
@@ -578,7 +578,7 @@ TEST(ModuleTest, MixedGlobalAndPersonalTasks) {
     EXPECT_EQ(personalCounter.load(), taskCount);
 }
 
-TEST(ModuleTest, RecursiveTaskSubmission) {
+TEST(NekoThreadPoolModuleTest, RecursiveTaskSubmission) {
     ThreadPool pool(4);
     std::atomic<int> counter{0};
 
@@ -617,7 +617,7 @@ TEST(ModuleTest, RecursiveTaskSubmission) {
 // === Module Performance Tests ===
 // ==========================================
 
-TEST(ModuleTest, TaskThroughput) {
+TEST(NekoThreadPoolModuleTest, TaskThroughput) {
     ThreadPool pool(4);
     const int taskCount = 5000;
     std::atomic<int> counter{0};
@@ -639,7 +639,7 @@ TEST(ModuleTest, TaskThroughput) {
     std::cout << "[Module] Processed " << taskCount << " tasks in " << duration.count() << " ms" << std::endl;
 }
 
-TEST(ModuleTest, DynamicThreadAdjustmentUnderLoad) {
+TEST(NekoThreadPoolModuleTest, DynamicThreadAdjustmentUnderLoad) {
     ThreadPool pool(2);
     std::atomic<int> counter{0};
 
