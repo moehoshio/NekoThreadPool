@@ -6,6 +6,7 @@ An easy-to-use and efficient C++ 20 thread pool that supports task priorities an
 ![Require](https://img.shields.io/badge/%20Require%20-%3E=%20C++%2020-orange.svg)
 [![CMake](https://img.shields.io/badge/CMake-3.14+-green.svg)](https://cmake.org/)
 ![Module Support](https://img.shields.io/badge/Modules-C%2B%2B20-blueviolet.svg)
+[![CI Status](https://github.com/moehoshio/NekoThreadPool/actions/workflows/ci.yml/badge.svg)](https://github.com/moehoshio/NekoThreadPool/actions/workflows/ci.yml)
 
 ## Features
 
@@ -117,7 +118,7 @@ Add NekoThreadPool to your `conanfile.txt`:
 
 ```ini
 [requires]
-neko-threadpool/*
+neko-threadpool/[*]
 
 [generators]
 CMakeDeps
@@ -130,7 +131,7 @@ Or use it in your `conanfile.py`:
 from conan import ConanFile
 
 class YourProject(ConanFile):
-    requires = "neko-threadpool/*"
+    requires = "neko-threadpool/[*]"
     generators = "CMakeDeps", "CMakeToolchain"
 ```
 
@@ -154,17 +155,17 @@ target_link_libraries(your_target PRIVATE Neko::ThreadPool)
 To enable C++20 module support with Conan, use the `enable_module` option:
 
 ```shell
-conan install . --build=missing -o neko-threadpool/*:enable_module=True
+conan install . --build=missing -o neko-threadpool/[*]:enable_module=True
 ```
 
 Or specify it in your `conanfile.txt`:
 
 ```ini
 [requires]
-neko-threadpool/*
+neko-threadpool/[*]
 
 [options]
-neko-threadpool/*:enable_module=True
+neko-threadpool/[*]:enable_module=True
 
 [generators]
 CMakeDeps
