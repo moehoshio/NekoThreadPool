@@ -39,9 +39,7 @@ if(NEKO_THREAD_POOL_AUTO_FETCH_DEPS)
             GIT_TAG        main
         )
         set(NEKO_SCHEMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-        if (NEKO_THREAD_POOL_ENABLE_MODULE)
-            set(NEKO_SCHEMA_ENABLE_MODULE ON CACHE BOOL "" FORCE)
-        endif()
+        set(NEKO_SCHEMA_ENABLE_MODULE ${NEKO_THREAD_POOL_ENABLE_MODULE} CACHE BOOL "" FORCE)
         FetchContent_MakeAvailable(NekoSchema)
     endif()
 
